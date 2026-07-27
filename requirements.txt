@@ -1,4 +1,7 @@
-Flask==2.3.3
-pandas
-numpy==1.24.3
-yfinance==0.2.33
+Flask==3.0.3
+pandas==2.2.3
+numpy==1.26.4
+yfinance==0.2.35
+gunicorn==22.0.0
+setuptools==70.0.0
+wheel==0.43.0
