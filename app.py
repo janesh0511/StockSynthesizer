@@ -12,6 +12,10 @@ import re
 from dataclasses import dataclass, asdict
 from typing import Optional, List, Dict
 
+# ADD THIS IMPORT
+from sentiment_aggregator import SentimentAggregator, create_sentiment_point
+
+
 app = Flask(__name__, static_folder='.', static_url_path='')
 
 # ===== STOCK DATA CACHE =====
@@ -302,6 +306,10 @@ stream = RealTimeStream()
 stream.start()
 
 
+
+# ADD THIS - Sentiment Aggregator Instance
+aggregator = SentimentAggregator()
+
 # ===== STOCK DATA FUNCTIONS =====
 def get_stock_data(ticker):
     """Fetch real stock data from Yahoo Finance"""
@@ -589,7 +597,83 @@ def stream_events():
             'Connection': 'keep-alive'
         }
     )
+# ===== SENTIMENT AGGREGATOR ENDPOINTS =====
 
+@app.route('/api/aggregate/<ticker>')
+def get_aggregated_sentiment(ticker):
+    """Get aggregated sentiment score for a specific ticker"""
+    sources = ['SEC Filings', 'Earnings Transcripts', 'Financial News', 'Reddit/WSB']
+    
+    # Clear previous data for fresh aggregation
+    aggregator.clear_history()
+    
+    # Add real-time stream messages to aggregator
+    recent_messages = stream.get_recent_messages(20)
+    for msg in recent_messages:
+        if msg.get('sentiment_score') is not None:
+            # Map source names to match aggregator
+            source_map = {
+                'Reuters': 'Financial News',
+                'Bloomberg': 'Financial News',
+                'CNBC': 'Financial News',
+                'WSJ': 'Financial News',
+                'Reddit': 'Reddit/WSB'
+            }
+            source = source_map.get(msg.get('source', ''), 'Financial News')
+            
+            point = create_sentiment_point(
+                source=source,
+                score=msg.get('sentiment_score', 0),
+                timestamp=datetime.now() - timedelta(minutes=random.randint(1, 30)),
+                volume=random.randint(10, 100) if source == 'Reddit/WSB' else None
+            )
+            aggregator.add_sentiment_point(point)
+    
+    # Generate additional mock data for variety
+    for i in range(15):
+        source = random.choice(sources)
+        score = random.uniform(-0.8, 0.8)
+        hours_ago = random.uniform(0.1, 48)
+        volume = random.randint(10, 200) if source == 'Reddit/WSB' else None
+        
+        point = create_sentiment_point(
+            source=source,
+            score=score,
+            timestamp=datetime.now() - timedelta(hours=hours_ago),
+            volume=volume,
+            confidence=random.uniform(0.5, 0.95)
+        )
+        aggregator.add_sentiment_point(point)
+    
+    # Perform aggregation
+    result = aggregator.aggregate()
+    result['ticker'] = ticker.upper()
+    
+    return jsonify(result)
+
+
+@app.route('/api/aggregate/status')
+def get_aggregator_status():
+    """Get aggregator statistics"""
+    stats = aggregator.get_statistics()
+    return jsonify(stats)
+
+
+@app.route('/api/aggregate/trend/<ticker>')
+def get_aggregator_trend(ticker):
+    """Get historical trend data"""
+    hours = request.args.get('hours', 24, type=int)
+    trend = aggregator.get_historical_trend(lookback_hours=hours)
+    return jsonify({
+        'ticker': ticker.upper(),
+        'lookback_hours': hours,
+        'trend_data': trend
+    })
+
+# ===== END SENTIMENT AGGREGATOR ENDPOINTS =====
+
+import os
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8501)
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 8501)))
+
