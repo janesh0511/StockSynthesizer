@@ -921,11 +921,19 @@
             </div>
             
             <!-- Action Section -->
-            <div class="action-section">
-                <h3>AI Trade Signal</h3>
-                <p class="signal bullish" id="tradeSignal">✅ Recommendation: LONG position based on strong earnings sentiment convergence.</p>
-                <button class="btn" id="exportBtn">Export Alpha Report to PDF</button>
-            </div>
+<div class="action-section">
+    <h3>AI Trade Signal</h3>
+    <p class="signal bullish" id="tradeSignal">✅ Recommendation: LONG position based on strong earnings sentiment convergence.</p>
+    
+    <!-- Agent Alpha Button -->
+    <button class="btn" id="exportBtn" style="margin-right: 10px;">Export Alpha Report to PDF</button>
+    <button class="btn" id="agentAlphaBtn" style="background: linear-gradient(135deg, #6c5ce7, #a29bfe);">🎯 Generate Alpha Insight</button>
+    
+    <!-- Agent Alpha Results Container -->
+    <div id="agentAnalysis" style="display: none; margin-top: 20px; padding: 20px; background: rgba(30, 31, 38, 0.6); border-radius: 12px; border: 1px solid rgba(108, 92, 231, 0.3);">
+        <div id="agentAnalysisContent"></div>
+    </div>
+</div>
             
             <div class="footer">
                 SentimentAlpha Engine | Synthesizing cross-asset market psychology | Powered by LLM-based Sentiment Analysis
@@ -1622,6 +1630,51 @@ async function fetchAggregatedSentiment() {
             // Start the app
             init();
         });
+        // ===== AGENT ALPHA =====
+document.getElementById('agentAlphaBtn').addEventListener('click', async function() {
+    const ticker = document.getElementById('tickerInput').value || 'AAPL';
+    const analysisDiv = document.getElementById('agentAnalysis');
+    const contentDiv = document.getElementById('agentAnalysisContent');
+    
+    // Show loading state
+    analysisDiv.style.display = 'block';
+    contentDiv.innerHTML = `
+        <div style="text-align: center; padding: 20px;">
+            <div style="display: inline-block; width: 40px; height: 40px; border: 3px solid #3a3c44; border-radius: 50%; border-top-color: #6c5ce7; animation: spin 0.8s linear infinite;"></div>
+            <p style="margin-top: 10px; color: #b0b0b0;">🧠 Agent Alpha is analyzing market psychology...</p>
+        </div>
+    `;
+    
+    try {
+        const response = await fetch(`/api/agent/analyze/${ticker}`);
+        const data = await response.json();
+        
+        // Parse markdown (simple markdown to HTML conversion)
+        let html = data.analysis;
+        // Basic markdown conversion
+        html = html.replace(/### (.*)/g, '<h3 style="color: #6c5ce7; margin-top: 20px;">$1</h3>');
+        html = html.replace(/## (.*)/g, '<h2 style="color: #a29bfe; margin-top: 25px;">$1</h2>');
+        html = html.replace(/\n- /g, '<br>• ');
+        html = html.replace(/\n/g, '<br>');
+        
+        contentDiv.innerHTML = `
+            <div style="font-size: 14px; line-height: 1.8; color: #fafafa;">
+                ${html}
+                <hr style="border-color: #3a3c44; margin: 20px 0;">
+                <p style="color: #6c6e7a; font-size: 12px;">
+                    Generated on ${new Date().toLocaleString()} | Agent Alpha AI
+                </p>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error getting agent analysis:', error);
+        contentDiv.innerHTML = `
+            <div style="color: #ff6b6b; text-align: center; padding: 20px;">
+                ❌ Error generating analysis. Please try again.
+            </div>
+        `;
+    }
+});
     </script>
 </body>
 </html>
