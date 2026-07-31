@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: StockSynthesizer
+    env: python
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn app:app
