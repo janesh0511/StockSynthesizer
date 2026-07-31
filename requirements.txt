@@ -2,6 +2,4 @@ Flask==2.3.3
 pandas==2.0.3
 numpy==1.24.3
 yfinance==0.2.33
-openai==0.28.0
-requests==2.31.0
-python-dotenv==1.0.0
+plotly==5.18.0

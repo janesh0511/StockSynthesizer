@@ -1,12 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- Google Font for a modern look -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SentimentAlpha | Financial Engine</title>
     
     <!-- Chart.js for visualizations -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Plotly for interactive charts -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     
     <style>
         /* ===== INLINE CSS ===== */
@@ -20,12 +25,13 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: #0e1117;
             color: #fafafa;
-            padding: 20px;
+            
         }
         
         .container {
             max-width: 1400px;
             margin: 0 auto;
+            padding-left: 0; /* Make sure this is 0! */
         }
         
         /* Sidebar */
@@ -193,25 +199,29 @@
             font-weight: 600;
         }
         
-        /* Main Content */
-        .main-content {
-            margin-left: 300px;
-            padding: 20px;
-        }
-        
-        .main-title {
+           .main-content {
+    margin-left: 300px;
+    padding: 20px 40px;
+    padding-top: 10px;
+    min-height: 100vh;
+    position: relative;
+    z-index: 1;
+    }
+           .main-title {
             font-size: 36px;
             font-weight: 700;
             margin-bottom: 5px;
+            margin-top: 50px;       /* Pushes the title down so it doesn't hit the Back button */
             background: linear-gradient(135deg, #4a9eff, #00d4ff);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            text-align: center; 
         }
-        
         .main-subtitle {
             font-size: 18px;
             color: #b0b0b0;
             margin-bottom: 30px;
+            text-align: center;
         }
         
         /* Stock Price Bar */
@@ -280,12 +290,19 @@
             margin-top: 4px;
         }
         
-        /* Grid Layout */
+        /* Grid Layout - Updated */
         .grid-3 {
             display: grid;
-            grid-template-columns: 1fr 1fr 2fr;
+            grid-template-columns: 1.2fr 0.8fr 2fr;
             gap: 20px;
             margin-bottom: 30px;
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
         }
         
         .card {
@@ -399,7 +416,6 @@
             border-radius: 4px;
             color: #8ab4f8;
         }
-        
         
         /* Live Feed Messages */
         .message-container {
@@ -668,6 +684,12 @@
             background: #3a8be0;
         }
         
+        /* Loading spinner animation */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
         /* Responsive */
         @media (max-width: 1024px) {
             .grid-3 {
@@ -707,10 +729,75 @@
                 justify-content: center;
             }
         }
-    </style>
-</head>
 
-    <body>
+                /* ===== NEW GLASS GAUGE CSS ===== */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            margin: 20px 0;
+            width: 100%;
+            text-align: center;
+            font-family: 'Inter', sans-serif;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .gauge-wrapper {
+            position: relative;
+            width: 140px;
+            height: 140px;
+            margin-top: 10px;
+        }
+
+        .gauge-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 22px;
+            font-weight: 600;
+            color: white;
+        }
+
+        #sentimentGauge {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+                /* ===== PARTICLE BACKGROUND ===== */
+        #particles-js {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: -1; /* Puts it behind everything */
+            pointer-events: none; /* Allows you to click through it */
+        }
+        
+        /* Make sure the glass card and other items sit on top of it */
+        .container, .sidebar, .main-content {
+            position: relative;
+            z-index: 1;
+        }
+    </style>
+   
+       <!-- Particles.js for the cool animated network background -->
+    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+</head>
+<body>
+        <!-- Particle Background Container -->
+    <div id="particles-js"></div>
     <!-- ===== BACK TO LANDING PAGE BUTTON - TOP RIGHT ===== -->
     <div style="
         position: fixed; 
@@ -739,10 +826,10 @@
             ← Back to Home
         </a>
     </div>
+    
     <div class="container">
         <!-- Sidebar -->
         <div class="sidebar">
-      
             <h2>📈 Market Intelligence</h2>
             
             <label class="sidebar-label">Ticker Symbol</label>
@@ -766,8 +853,6 @@
             
             <div class="sidebar-divider"></div>
 
-            <!-- Back to Landing Page -->
-            
             <!-- Real-Time Stream Controls -->
             <div class="stream-controls">
                 <h3>📡 Live Data Stream</h3>
@@ -792,8 +877,7 @@
         </div>
         
         <!-- Main Content -->
-        <div class="main-content">
-            <h1 class="main-title">SentimentAlpha: Market Sentiment Engine</h1>
+<div class="main-content" style="margin-left: 300px; padding: 20px 40px; padding-top: 10px; margin-top: -900px; position: relative; top: 0; height: auto; min-height: 100vh;">            <h1 class="main-title">SentimentAlpha: Market Sentiment Engine</h1>
             <p class="main-subtitle" id="tickerDisplay">Synthesized Psychological Signal for AAPL</p>
             
             <!-- Stock Price Bar -->
@@ -825,38 +909,64 @@
                 </div>
             </div>
             
-            <!-- Top Metrics Grid -->
-            <div class="grid-3">
-               <div class="card">
-    <h3>Alpha Signal Score</h3>
-    <div class="metric-value" id="sentimentScore">72/100</div>
-    <div class="metric-label bullish" id="sentimentLabel">🟢 Bullish</div>
-    <div class="metric-sub" id="liveMsgIndicator">📡 Live: 0 msgs</div>
-    <!-- ADD THIS DIV -->
-    <div id="sentimentSummary" style="
-        font-size: 12px;
-        color: #b0b0b0;
-        margin-top: 12px;
-        padding: 10px;
-        background: rgba(40, 50, 120, 0.6);
-        border-radius: 8px;
-        border-left: 3px solid #4a9eff;
-        line-height: 1.4;
-        min-height: 20px;
-    "></div>
-</div>
-                
+            <!-- Top Metrics Grid - Using grid-2 -->
+            <div class="grid-2">
                 <div class="card">
-                    <h3>Market Sentiment Index</h3>
-                    <div class="gauge-container">
-                        <canvas id="gaugeChart"></canvas>
-                    </div>
+                    <h3>Alpha Signal Score</h3>
+                    <div class="metric-value" id="sentimentScore">72/100</div>
+                    <div class="metric-label bullish" id="sentimentLabel">🟢 Positive</div>
+                    <div class="metric-sub" id="liveMsgIndicator">📡 Live: 0 msgs</div>
+                    <div id="sentimentSummary" style="
+                        font-size: 12px;
+                        color: #b0b0b0;
+                        margin-top: 12px;
+                        padding: 10px;
+                        background: rgba(40, 50, 120, 0.6);
+                        border-radius: 8px;
+                        border-left: 3px solid #4a9eff;
+                        line-height: 1.4;
+                        min-height: 20px;
+                    "></div>
                 </div>
                 
-                <div class="card">
-                    <h3>Sentiment vs Price Correlation</h3>
-                    <div class="chart-container">
-                        <canvas id="trendChart"></canvas>
+                                <!-- NEW GLASS GAUGE CARD -->
+                <div class="glass-card gauge-container">
+                    <h3>Sentiment Pulse</h3>
+                    <div class="gauge-wrapper">
+                        <canvas id="sentimentGauge"></canvas>
+                        <div class="gauge-label">
+                            <span id="gaugeScore">0</span>%
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sentiment vs Price Chart - Full Width -->
+  <div style="background: #1e1f26; border-radius: 12px; padding: 25px; border: 1px solid #3a3c44; width: 100%;">                <h2 style="font-size: 22px; margin-bottom: 20px; color: #fafafa;">📊 Sentiment vs Price Correlation</h2>
+                
+                <div id="chartContainer" style="height: 550px; width: 100%;">
+                    <div id="chartLoading" style="text-align: center; padding: 50px; color: #6c6e7a;">
+                        <div style="display: inline-block; width: 40px; height: 40px; border: 3px solid #3a3c44; border-radius: 50%; border-top-color: #4a9eff; animation: spin 0.8s linear infinite;"></div>
+                        <p style="margin-top: 10px;">Loading chart data...</p>
+                    </div>
+                    <div id="chartContent" style="display: none; height: 100%; width: 100%;"></div>
+                </div>
+                
+                <div style="display: flex; gap: 25px; margin-top: 20px; flex-wrap: wrap; justify-content: center; padding: 10px 0;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="display: inline-block; width: 25px; height: 3px; background: #4a9eff;"></span>
+                        <span style="color: #b0b0b0; font-size: 13px;">Price</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="display: inline-block; width: 25px; height: 3px; background: #ffd93d;"></span>
+                        <span style="color: #b0b0b0; font-size: 13px;">Sentiment</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: #2ecc71;"></span>
+<span style="color: #b0b0b0; font-size: 13px;">Positive Sentiment ( > 0.3)</span>                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: #ff6b6b;"></span>
+                        <span style="color: #b0b0b0; font-size: 13px;">Negative Sentiment ( < -0.3)</span>
                     </div>
                 </div>
             </div>
@@ -921,19 +1031,54 @@
             </div>
             
             <!-- Action Section -->
-<div class="action-section">
-    <h3>AI Trade Signal</h3>
-    <p class="signal bullish" id="tradeSignal">✅ Recommendation: LONG position based on strong earnings sentiment convergence.</p>
-    
-    <!-- Agent Alpha Button -->
-    <button class="btn" id="exportBtn" style="margin-right: 10px;">Export Alpha Report to PDF</button>
-    <button class="btn" id="agentAlphaBtn" style="background: linear-gradient(135deg, #6c5ce7, #a29bfe);">🎯 Generate Alpha Insight</button>
-    
-    <!-- Agent Alpha Results Container -->
-    <div id="agentAnalysis" style="display: none; margin-top: 20px; padding: 20px; background: rgba(30, 31, 38, 0.6); border-radius: 12px; border: 1px solid rgba(108, 92, 231, 0.3);">
-        <div id="agentAnalysisContent"></div>
-    </div>
-</div>
+            <div class="action-section">
+                <h3>AI Trade Signal</h3>
+                <p class="signal bullish" id="tradeSignal">✅ Recommendation: LONG position based on strong earnings sentiment convergence.</p>
+                
+                <!-- Agent Alpha Button -->
+<button class="btn" id="exportBtn" style="margin-right: 10px;">🎉 Celebrate Alpha</button>                <button class="btn" id="agentAlphaBtn" style="background: linear-gradient(135deg, #6c5ce7, #a29bfe);">🎯 Generate Alpha Insight</button>
+                
+                <!-- Agent Alpha Results Container -->
+                <div id="agentAnalysis" style="display: none; margin-top: 20px; padding: 20px; background: rgba(30, 31, 38, 0.6); border-radius: 12px; border: 1px solid rgba(108, 92, 231, 0.3);">
+                    <div id="agentAnalysisContent"></div>
+                </div>
+            </div>
+                        <!-- ===== ABOUT THE CREATOR ===== -->
+            <div class="glass-card" style="margin-top: 40px; padding: 30px; text-align: left; width: 100%;">
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <h2 style="font-size: 22px; color: #fafafa; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+                        👨‍💻 About the Creator
+                    </h2>
+                    
+                    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: center;">
+                        <!-- Avatar Placeholder -->
+                        <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #4a9eff, #6c5ce7); display: flex; align-items: center; justify-content: center; font-size: 32px; border: 2px solid rgba(255,255,255,0.2);">
+                            JS
+                        </div>
+                        
+                        <div style="flex: 1; min-width: 250px;">
+                            <h3 style="font-size: 18px; color: #fafafa;">Janesh Senthilnathan</h3>
+                            <p style="color: #b0b0b0; font-size: 14px; margin-top: 5px;">
+                                Aspiring Strategy Consultant | Market Enthusiast
+                            </p>
+                        </div>
+                    </div>
+
+                    <div style="color: #d0d0d0; line-height: 1.7; font-size: 15px;">
+                        <p>
+                            I built this app at <strong style="color: #4a9eff;">17 years old</strong> as part of an AI+ML certification program through 
+                            <strong style="color: #4a9eff;">BetterMind Labs</strong>. 
+                        </p>
+                        <p style="margin-top: 10px;">
+                            Finance and investing have always fascinated me—I love diving into stock market trends, understanding market psychology, 
+                            and figuring out how data tells a story. This application is my way of blending my passion for finance with the power of AI 
+                            to give you a clearer picture of market sentiment.
+                        </p>
+                        <p style="margin-top: 10px; color: #8ab4f8; border-left: 3px solid #4a9eff; padding-left: 12px; background: rgba(74, 158, 255, 0.05); border-radius: 4px;">
+                            💡 "I hope this application helps you make smarter, data-driven decisions. Happy investing!"
+                        </p>
+                    </div>
+                </div>
             
             <div class="footer">
                 SentimentAlpha Engine | Synthesizing cross-asset market psychology | Powered by LLM-based Sentiment Analysis
@@ -1077,11 +1222,11 @@
                     let labelClass = 'neutral';
                     let emoji = '🟡';
                     if (currentValue > 65) {
-                        label = 'Bullish';
+                        label = 'Positive';
                         labelClass = 'bullish';
                         emoji = '🟢';
                     } else if (currentValue < 40) {
-                        label = 'Bearish';
+                        label = 'Negative';
                         labelClass = 'bearish';
                         emoji = '🔴';
                     }
@@ -1267,72 +1412,267 @@
                     console.error('Error fetching sentiment data:', error);
                 }
             }
+            
             // ===== FETCH AGGREGATED SENTIMENT =====
-async function fetchAggregatedSentiment() {
-    const ticker = document.getElementById('tickerInput').value || 'AAPL';
-    try {
-        const response = await fetch(`/api/aggregate/${ticker}`);
-        const data = await response.json();
-        
-        // Update UI with aggregated data
-        if (data.final_score !== undefined) {
-            // Convert -1 to 1 scale to 0-100 scale for display
-            const scorePercent = Math.round((data.final_score + 1) / 2 * 100);
-            document.getElementById('sentimentScore').textContent = `${scorePercent}/100`;
-            
-            // Update gauge
-            updateGauge(scorePercent);
-            
-            // Update label
-            let label = 'Neutral';
-            let labelClass = 'neutral';
-            let emoji = '🟡';
-            if (data.final_score > 0.2) {
-                label = 'Bullish';
-                labelClass = 'bullish';
-                emoji = '🟢';
-            } else if (data.final_score < -0.2) {
-                label = 'Bearish';
-                labelClass = 'bearish';
-                emoji = '🔴';
+            async function fetchAggregatedSentiment() {
+                const ticker = document.getElementById('tickerInput').value || 'AAPL';
+                try {
+                    const response = await fetch(`/api/aggregate/${ticker}`);
+                    const data = await response.json();
+                    
+                    if (data.final_score !== undefined) {
+                        const scorePercent = Math.round((data.final_score + 1) / 2 * 100);
+                        document.getElementById('sentimentScore').textContent = `${scorePercent}/100`;
+                        updateGauge(scorePercent);
+                        
+                        let label = 'Neutral';
+                        let labelClass = 'neutral';
+                        let emoji = '🟡';
+                        if (data.final_score > 0.2) {
+                            label = 'Positive';
+                            labelClass = 'bullish';
+                            emoji = '🟢';
+                        } else if (data.final_score < -0.2) {
+                            label = 'Negative';
+                            labelClass = 'bearish';
+                            emoji = '🔴';
+                        }
+                        
+                        document.getElementById('sentimentLabel').textContent = `${emoji} ${label}`;
+                        document.getElementById('sentimentLabel').className = `metric-label ${labelClass}`;
+                        
+                        const summaryEl = document.getElementById('sentimentSummary');
+                        if (summaryEl && data.summary) {
+                            summaryEl.textContent = data.summary;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching aggregated sentiment:', error);
+                }
             }
             
-            document.getElementById('sentimentLabel').textContent = `${emoji} ${label}`;
-            document.getElementById('sentimentLabel').className = `metric-label ${labelClass}`;
-            
-            // Show summary
-            const summaryEl = document.getElementById('sentimentSummary');
-            if (summaryEl && data.summary) {
-                summaryEl.textContent = data.summary;
-            }
-        }
-    } catch (error) {
-        console.error('Error fetching aggregated sentiment:', error);
+            // ===== LOAD SENTIMENT CHART =====
+            async function loadSentimentChart() {
+                const ticker = document.getElementById('tickerInput').value || 'AAPL';
+                const loading = document.getElementById('chartLoading');
+                const content = document.getElementById('chartContent');
+                
+                try {
+                    const response = await fetch(`/api/chart/${ticker}?days=30`);
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                    loading.style.display = 'none';
+                    content.style.display = 'block';
+                    
+                    // Price trace
+                    const trace1 = {
+                        x: data.dates,
+                        y: data.prices,
+                        name: 'Price',
+                        type: 'scatter',
+                        mode: 'lines',
+                        line: { color: '#4a9eff', width: 2.5 },
+                        hovertemplate: '<b>%{x}</b><br>Price: $%{y:.2f}<extra></extra>'
+                    };
+                    
+                    // Sentiment trace with color coding
+                    const sentimentColors = data.sentiment.map(s => {
+                        if (s > 0.3) return '#2ecc71';
+                        if (s < -0.3) return '#ff6b6b';
+                        return '#ffd93d';
+                    });
+                    
+                    const trace2 = {
+                        x: data.dates,
+                        y: data.sentiment,
+                        name: 'Sentiment',
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        line: { color: '#ffd93d', width: 2 },
+                        marker: { 
+                            color: sentimentColors,
+                            size: 8,
+                            line: { width: 1, color: '#1e1f26' }
+                        },
+                        fill: 'tozeroy',
+                        fillcolor: 'rgba(255, 217, 61, 0.15)',
+                        yaxis: 'y2',
+                        hovertemplate: '<b>%{x}</b><br>Sentiment: %{y:.3f}<br>Keywords: %{customdata}<extra></extra>',
+                        customdata: data.keywords.map(k => k.join(', '))
+                    };
+                    
+                    const layout = {
+                        template: 'plotly_dark',
+                        paper_bgcolor: '#1e1f26',
+                        plot_bgcolor: '#1e1f26',
+                        font: { color: '#fafafa' },
+                        hovermode: 'x unified',
+                        hoverlabel: {
+                            bgcolor: 'rgba(30, 31, 38, 0.95)',
+                            font_size: 12,
+                            font_color: '#fafafa',
+                            bordercolor: 'rgba(74, 158, 255, 0.3)'
+                        },
+                        legend: {
+                            orientation: 'h',
+                            yanchor: 'bottom',
+                            y: 1.02,
+                            xanchor: 'right',
+                            x: 1,
+                            bgcolor: 'rgba(0,0,0,0)'
+                        },
+                        margin: { l: 70, r: 70, t: 50, b: 50 },
+                        height: 500,
+                        xaxis: {
+                            title: { text: 'Date', font: { color: '#b0b0b0' } },
+                            gridcolor: '#3a3c44',
+                            tickfont: { color: '#b0b0b0' }
+                        },
+                        yaxis: {
+                            title: { text: 'Price ($)', font: { color: '#b0b0b0' } },
+                            gridcolor: '#3a3c44',
+                            tickfont: { color: '#b0b0b0' },
+                            side: 'left'
+                        },
+                        yaxis2: {
+                            title: { text: 'Sentiment Score', font: { color: '#b0b0b0' } },
+                            tickfont: { color: '#b0b0b0' },
+                            side: 'right',
+                            overlaying: 'y',
+                            range: [-1.2, 1.2],
+                            showgrid: false
+                        },
+                        shapes: [
+                            {
+                                type: 'line',
+                                x0: data.dates[0],
+                                x1: data.dates[data.dates.length - 1],
+                                y0: 0.3,
+                                y1: 0.3,
+                                line: { color: '#2ecc71', width: 1, dash: 'dash' },
+                                yref: 'y2',
+                                opacity: 0.5
+                            },
+                            {
+                                type: 'line',
+                                x0: data.dates[0],
+                                x1: data.dates[data.dates.length - 1],
+                                y0: -0.3,
+                                y1: -0.3,
+                                line: { color: '#ff6b6b', width: 1, dash: 'dash' },
+                                yref: 'y2',
+                                opacity: 0.5
+                            }
+                        ],
+                        annotations: [
+    {
+        x: data.dates[data.dates.length - 1],
+        y: 0.6,
+        text: '🟢 Positive Sentiment',  // ← Changed
+        showarrow: false,
+        font: { size: 10, color: '#2ecc71' },
+        xref: 'x',
+        yref: 'y2',
+        xanchor: 'right'
+    },
+    {
+        x: data.dates[data.dates.length - 1],
+        y: -0.6,
+        text: '🔴 Negative Sentiment',  // ← Changed
+        showarrow: false,
+        font: { size: 10, color: '#ff6b6b' },
+        xref: 'x',
+        yref: 'y2',
+        xanchor: 'right'
     }
-}
+]
+                    };
+                    
+                    const config = {
+                        displayModeBar: true,
+                        modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                        displaylogo: false,
+                        responsive: true
+                    };
+                    
+                    Plotly.newPlot('chartContent', [trace1, trace2], layout, config);
+                    
+                } catch (error) {
+                    console.error('Chart error:', error);
+                    loading.innerHTML = `
+                        <div style="color: #ff6b6b; text-align: center; padding: 20px;">
+                            <p>⚠️ Error loading chart</p>
+                            <p style="font-size: 12px; color: #6c6e7a;">${error.message}</p>
+                            <button onclick="loadSentimentChart()" style="margin-top: 10px; padding: 8px 20px; background: #4a9eff; border: none; border-radius: 6px; color: white; cursor: pointer;">Retry</button>
+                        </div>
+                    `;
+                }
+            }
             
             // ===== UPDATE UI =====
+            // ===== UPDATED UI WITH COUNT-UP ANIMATION =====
             function updateUI(data) {
                 document.getElementById('tickerDisplay').textContent = 
                     `Synthesized Psychological Signal for ${data.ticker || 'AAPL'}`;
                 
-                const score = data.sentiment_score || 72;
-                sentimentScoreEl.textContent = `${score}/100`;
-                currentSentimentScore = score;
+                const targetScore = data.sentiment_score || 72;
+                const scoreEl = sentimentScoreEl;
                 
+                // Parse current number (remove "/100" if it exists)
+                let currentText = scoreEl.textContent;
+                let currentNum = parseInt(currentText) || 0;
+                
+                // If the score is already correct, don't animate
+                if (currentNum === targetScore) {
+                    // Just ensure the label is correct
+                    updateSentimentLabel(targetScore);
+                    return;
+                }
+
+                // Animate counting up/down
+                const duration = 1000; // 1 second animation
+                const startTime = performance.now();
+                
+                function animateCount(currentTime) {
+                    const elapsed = currentTime - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    
+                    // Ease-out effect (slows down at the end)
+                    const easeOut = 1 - Math.pow(1 - progress, 3);
+                    const currentValue = Math.round(currentNum + (targetScore - currentNum) * easeOut);
+                    
+                    scoreEl.textContent = `${currentValue}/100`;
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(animateCount);
+                    } else {
+                        scoreEl.textContent = `${targetScore}/100`; // Ensure final number is exact
+                        currentSentimentScore = targetScore;
+                        updateSentimentLabel(targetScore);
+                    }
+                }
+                
+                requestAnimationFrame(animateCount);
+            }
+
+            // Helper to update the label separately
+            function updateSentimentLabel(score) {
                 let label = 'Neutral';
                 let labelClass = 'neutral';
                 let emoji = '🟡';
                 if (score > 65) {
-                    label = 'Bullish';
+                    label = 'Positive';
                     labelClass = 'bullish';
                     emoji = '🟢';
                 } else if (score < 40) {
-                    label = 'Bearish';
+                    label = 'Negative';
                     labelClass = 'bearish';
                     emoji = '🔴';
                 }
-                
                 sentimentLabelEl.textContent = `${emoji} ${label}`;
                 sentimentLabelEl.className = `metric-label ${labelClass}`;
             }
@@ -1379,118 +1719,51 @@ async function fetchAggregatedSentiment() {
             }
             
             // ===== GAUGE CHART =====
+                       // ===== NEW GLOWING GAUGE =====
             function updateGauge(value) {
-                const ctx = document.getElementById('gaugeChart').getContext('2d');
-                const gaugeValue = Math.min(1, Math.max(0, value / 100));
-                
+                const canvas = document.getElementById('sentimentGauge');
+                if (!canvas) return; // Safety check
+
+                const ctx = canvas.getContext('2d');
+                const gaugeValue = Math.min(100, Math.max(0, value));
+                const remaining = 100 - gaugeValue;
+
+                // Determine color
+                let color = '#4ade80'; // Green
+                if (gaugeValue < 40) color = '#f87171'; // Red
+                else if (gaugeValue < 65) color = '#facc15'; // Yellow
+
+                // Destroy existing chart if it exists to prevent overlap
                 if (charts.gauge) charts.gauge.destroy();
-                
+
                 charts.gauge = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
                         datasets: [{
-                            data: [gaugeValue, 1 - gaugeValue],
-                            backgroundColor: ['#2ecc71', '#3a3c44'],
-                            borderWidth: 0
+                            data: [gaugeValue, remaining],
+                            backgroundColor: [color, 'rgba(255, 255, 255, 0.1)'],
+                            borderWidth: 0,
+                            borderRadius: 10, // Makes it look like a glowing segmented ring
                         }]
                     },
                     options: {
-                        cutout: '70%',
-                        circumference: 180,
-                        rotation: 270,
+                        cutout: '80%',
                         plugins: {
                             legend: { display: false },
                             tooltip: { enabled: false }
                         },
                         animation: {
                             animateRotate: true,
-                            duration: 1000
-                        }
-                    },
-                    plugins: [{
-                        id: 'gaugeText',
-                        beforeDraw: function(chart) {
-                            const {width, height, ctx} = chart;
-                            ctx.save();
-                            const text = `${Math.round(value)}`;
-                            ctx.font = 'bold 30px -apple-system, sans-serif';
-                            ctx.fillStyle = '#fafafa';
-                            ctx.textAlign = 'center';
-                            ctx.textBaseline = 'middle';
-                            ctx.fillText(text, width / 2, height / 2 + 10);
-                            ctx.restore();
-                        }
-                    }]
-                });
-            }
-            
-            // ===== TREND CHART =====
-            function updateTrendChart(data) {
-                const ctx = document.getElementById('trendChart').getContext('2d');
-                const trend = data.trend_data || sentimentData.trend || { dates: [], sentiment: [], price: [] };
-                
-                if (charts.trend) charts.trend.destroy();
-                
-                const dates = trend.dates || [];
-                const sentiment = trend.sentiment || [];
-                const price = trend.price || [];
-                
-                charts.trend = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: dates.length ? dates : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                        datasets: [
-                            {
-                                label: 'Sentiment',
-                                data: sentiment.length ? sentiment : [60, 62, 65, 68, 70, 72, 71],
-                                borderColor: '#4a9eff',
-                                backgroundColor: 'rgba(74, 158, 255, 0.1)',
-                                tension: 0.4,
-                                pointRadius: 4,
-                                pointBackgroundColor: '#4a9eff'
-                            },
-                            {
-                                label: 'Price',
-                                data: price.length ? price : [150, 152, 151, 155, 158, 160, 159],
-                                borderColor: '#ff6b6b',
-                                backgroundColor: 'rgba(255, 107, 107, 0.1)',
-                                tension: 0.4,
-                                pointRadius: 4,
-                                pointBackgroundColor: '#ff6b6b',
-                                yAxisID: 'y1'
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                labels: {
-                                    color: '#b0b0b0',
-                                    font: { size: 11 }
-                                }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                ticks: { color: '#6c6e7a', font: { size: 10 } },
-                                grid: { color: '#3a3c44' }
-                            },
-                            y: {
-                                position: 'left',
-                                ticks: { color: '#6c6e7a', font: { size: 10 } },
-                                grid: { color: '#3a3c44' }
-                            },
-                            y1: {
-                                position: 'right',
-                                ticks: { color: '#6c6e7a', font: { size: 10 } },
-                                grid: { drawOnChartArea: false }
-                            }
+                            duration: 1500
                         }
                     }
                 });
+
+                // Update the text in the middle
+                document.getElementById('gaugeScore').innerText = Math.round(gaugeValue);
             }
+            
+           
             
             // ===== AREA CHART =====
             function updateAreaChart(data) {
@@ -1531,9 +1804,8 @@ async function fetchAggregatedSentiment() {
                 });
             }
             
-            function updateCharts(data) {
+                      function updateCharts(data) {
                 updateGauge(data.sentiment_score || 72);
-                updateTrendChart(data);
                 updateAreaChart(data);
             }
             
@@ -1551,7 +1823,6 @@ async function fetchAggregatedSentiment() {
                         const tabId = this.getAttribute('data-tab');
                         document.getElementById(tabId).classList.add('active');
                         
-                        // Fetch news when news tab is clicked
                         if (tabId === 'news') {
                             fetchRealNews();
                         }
@@ -1563,6 +1834,7 @@ async function fetchAggregatedSentiment() {
             function setupEventListeners() {
                 document.getElementById('tickerInput').addEventListener('change', function() {
                     fetchSentimentData();
+                    setTimeout(loadSentimentChart, 1000);
                 });
                 
                 document.getElementById('timeWindow').addEventListener('change', function() {
@@ -1607,74 +1879,118 @@ async function fetchAggregatedSentiment() {
                     
                     const btn = this;
                     const originalText = btn.textContent;
-                    btn.textContent = '🎈 Report Exported!';
+                    btn.textContent = '🎈 YAYYYYYY!';
                     setTimeout(() => {
                         btn.textContent = originalText;
                     }, 2000);
+                });
+                
+                // ===== AGENT ALPHA =====
+                document.getElementById('agentAlphaBtn').addEventListener('click', async function() {
+                    const ticker = document.getElementById('tickerInput').value || 'AAPL';
+                    const analysisDiv = document.getElementById('agentAnalysis');
+                    const contentDiv = document.getElementById('agentAnalysisContent');
+                    
+                    analysisDiv.style.display = 'block';
+                    contentDiv.innerHTML = `
+                        <div style="text-align: center; padding: 20px;">
+                            <div style="display: inline-block; width: 40px; height: 40px; border: 3px solid #3a3c44; border-radius: 50%; border-top-color: #6c5ce7; animation: spin 0.8s linear infinite;"></div>
+                            <p style="margin-top: 10px; color: #b0b0b0;">🧠 Agent Alpha is analyzing market psychology...</p>
+                        </div>
+                    `;
+                    
+                    try {
+                        const response = await fetch(`/api/agent/analyze/${ticker}`);
+                        const data = await response.json();
+                        
+                        let html = data.analysis;
+                        html = html.replace(/### (.*)/g, '<h3 style="color: #6c5ce7; margin-top: 20px;">$1</h3>');
+                        html = html.replace(/## (.*)/g, '<h2 style="color: #a29bfe; margin-top: 25px;">$1</h2>');
+                        html = html.replace(/\n- /g, '<br>• ');
+                        html = html.replace(/\n/g, '<br>');
+                        
+                        contentDiv.innerHTML = `
+                            <div style="font-size: 14px; line-height: 1.8; color: #fafafa;">
+                                ${html}
+                                <hr style="border-color: #3a3c44; margin: 20px 0;">
+                                <p style="color: #6c6e7a; font-size: 12px;">
+                                    Generated on ${new Date().toLocaleString()} | Agent Alpha AI
+                                </p>
+                            </div>
+                        `;
+                    } catch (error) {
+                        console.error('Error getting agent analysis:', error);
+                        contentDiv.innerHTML = `
+                            <div style="color: #ff6b6b; text-align: center; padding: 20px;">
+                                ❌ Error generating analysis. Please try again.
+                            </div>
+                        `;
+                    }
+                });
+            }
+            
+            // ===== PARTICLES ACTIVATION =====
+            function initParticles() {
+                particlesJS("particles-js", {
+                    "particles": {
+                        "number": { "value": 80, "density": { "enable": true, "value_area": 800 } },
+                        "color": { "value": "#4a9eff" },
+                        "shape": { "type": "circle" },
+                        "opacity": { "value": 0.5, "random": false },
+                        "size": { "value": 3, "random": true },
+                        "line_linked": {
+                            "enable": true,
+                            "distance": 150,
+                            "color": "#4a9eff",
+                            "opacity": 0.4,
+                            "width": 1
+                        },
+                        "move": {
+                            "enable": true,
+                            "speed": 2,
+                            "direction": "none",
+                            "random": false,
+                            "straight": false,
+                            "out_mode": "out",
+                            "bounce": false
+                        }
+                    },
+                    "interactivity": {
+                        "detect_on": "canvas",
+                        "events": {
+                            "onhover": { "enable": true, "mode": "grab" },
+                            "onclick": { "enable": true, "mode": "push" }
+                        },
+                        "modes": {
+                            "grab": { "distance": 140, "line_linked": { "opacity": 1 } },
+                            "push": { "particles_nb": 4 }
+                        }
+                    },
+                    "retina_detect": true
                 });
             }
             
             // ===== INITIALIZE =====
             function init() {
+                initParticles(); // Activate the particles background
                 setupTabs();
                 setupEventListeners();
                 fetchSentimentData();
                 fetchAggregatedSentiment();
                 connectSSE();
                 
-                // Initial fetch of news
                 setTimeout(fetchRealNews, 1000);
                 setTimeout(updateStreamStats, 1000);
+                setTimeout(loadSentimentChart, 1500);
             }
             
-            // Start the app
             init();
         });
-        // ===== AGENT ALPHA =====
-document.getElementById('agentAlphaBtn').addEventListener('click', async function() {
-    const ticker = document.getElementById('tickerInput').value || 'AAPL';
-    const analysisDiv = document.getElementById('agentAnalysis');
-    const contentDiv = document.getElementById('agentAnalysisContent');
-    
-    // Show loading state
-    analysisDiv.style.display = 'block';
-    contentDiv.innerHTML = `
-        <div style="text-align: center; padding: 20px;">
-            <div style="display: inline-block; width: 40px; height: 40px; border: 3px solid #3a3c44; border-radius: 50%; border-top-color: #6c5ce7; animation: spin 0.8s linear infinite;"></div>
-            <p style="margin-top: 10px; color: #b0b0b0;">🧠 Agent Alpha is analyzing market psychology...</p>
-        </div>
-    `;
-    
-    try {
-        const response = await fetch(`/api/agent/analyze/${ticker}`);
-        const data = await response.json();
-        
-        // Parse markdown (simple markdown to HTML conversion)
-        let html = data.analysis;
-        // Basic markdown conversion
-        html = html.replace(/### (.*)/g, '<h3 style="color: #6c5ce7; margin-top: 20px;">$1</h3>');
-        html = html.replace(/## (.*)/g, '<h2 style="color: #a29bfe; margin-top: 25px;">$1</h2>');
-        html = html.replace(/\n- /g, '<br>• ');
-        html = html.replace(/\n/g, '<br>');
-        
-        contentDiv.innerHTML = `
-            <div style="font-size: 14px; line-height: 1.8; color: #fafafa;">
-                ${html}
-                <hr style="border-color: #3a3c44; margin: 20px 0;">
-                <p style="color: #6c6e7a; font-size: 12px;">
-                    Generated on ${new Date().toLocaleString()} | Agent Alpha AI
-                </p>
-            </div>
-        `;
-    } catch (error) {
-        console.error('Error getting agent analysis:', error);
-        contentDiv.innerHTML = `
-            <div style="color: #ff6b6b; text-align: center; padding: 20px;">
-                ❌ Error generating analysis. Please try again.
-            </div>
-        `;
-    }
-});
     </script>
+
+    <!-- Chart.js Library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Chart.js Doughnut plugin (adds the gap between the gauge sections) -->
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-doughnutlabel"></script>
 </body>
 </html>
