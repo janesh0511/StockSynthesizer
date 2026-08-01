@@ -50,7 +50,8 @@ COMPANY_NAMES = {
     'JPM': 'JPMorgan Chase & Co.',
     'BAC': 'Bank of America Corp.',
     'DIS': 'Walt Disney Co.',
-    'VTI': 'Vanguard Total Stock Market ETF'
+    'VTI': 'Vanguard Total Stock Market ETF',
+    'SNDK': 'SanDisk Corporation',
 }
 
 TICKER_ALIASES = {
@@ -69,7 +70,8 @@ TICKER_ALIASES = {
     'JPMORGAN': 'JPM',
     'BANK OF AMERICA': 'BAC',
     'WALT DISNEY': 'DIS',
-    'VANGUARD TOTAL STOCK MARKET': 'VTI'
+    'VANGUARD TOTAL STOCK MARKET': 'VTI',
+     'SANDISK': 'SNDK', 
 }
 
 # ===== STOCK DATA CACHE =====
