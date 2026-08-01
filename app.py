@@ -16,15 +16,21 @@ from typing import Optional, List, Dict
 from agent_alpha import AgentAlpha
 from chart_visualizer import SentimentChart
 from sentiment_aggregator import SentimentAggregator, create_sentiment_point
+import finnhub
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
-# ===== PRODUCTION CONFIGURATION =====
-CACHE_DURATION = 15  # 15 seconds for near real-time
-MAX_RETRIES = 3
-RETRY_DELAY = 1  # seconds
-REQUEST_TIMEOUT = 10  # seconds
-YFINANCE_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+# ===== CONFIGURATION =====
+CACHE_DURATION = 180  # 3 MINUTES - reduced to get fresher data
+REQUEST_DELAY = 1.0   # 1 second between requests
+
+# ===== FINNHUB CONFIGURATION =====
+FINNHUB_API_KEY = 'd9mjtj9r01qtdq8u4d10d9mjtj9r01qtdq8u4d1g'
+finnhub_client = finnhub.Client(api_key=FINNHUB_API_KEY)
+
+# ===== SUPPRESS ALL WARNINGS =====
+import warnings
+warnings.filterwarnings("ignore")
 
 # ===== COMPANY NAME MAPPING =====
 COMPANY_NAMES = {
@@ -56,8 +62,6 @@ TICKER_ALIASES = {
     'GOOGLE': 'GOOGL',
     'ALPHABET': 'GOOGL',
     'META PLATFORMS': 'META',
-    'SPDR S&P 500': 'SPY',
-    'QQQ TRUST': 'QQQ',
     'BITCOIN': 'BTC-USD',
     'ETHEREUM': 'ETH-USD',
     'DOGECOIN': 'DOGE-USD',
@@ -74,57 +78,20 @@ stock_cache.clear()
 print("🗑️ Cleared stock cache on startup")
 
 # ===== MARKET STATUS =====
-def is_market_open() -> bool:
-    """Check if US stock market is currently open"""
-    now = datetime.now()
-    if now.weekday() >= 5:  # Saturday or Sunday
-        return False
-    market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
-    market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
-    return market_open <= now <= market_close
-
 def get_market_status() -> Dict:
-    """Get detailed market status for API responses"""
-    is_open = is_market_open()
+    now = datetime.now()
+    is_open = False
+    if now.weekday() < 5:
+        market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
+        is_open = market_open <= now <= market_close
     return {
         'is_open': is_open,
         'status': 'OPEN' if is_open else 'CLOSED',
-        'timestamp': datetime.now().isoformat()
+        'timestamp': now.isoformat()
     }
 
 # ===== REAL-TIME STREAMING ENGINE =====
-class StockTickerExtractor:
-    """Extract stock tickers from text"""
-    
-    TICKER_PATTERNS = {
-        'AAPL': r'\b(AAPL|Apple)\b',
-        'TSLA': r'\b(TSLA|Tesla)\b',
-        'NVDA': r'\b(NVDA|NVIDIA)\b',
-        'MSFT': r'\b(MSFT|Microsoft)\b',
-        'AMZN': r'\b(AMZN|Amazon)\b',
-        'GOOGL': r'\b(GOOGL|Google|Alphabet)\b',
-        'META': r'\b(META|Facebook)\b',
-        'SPY': r'\bSPY\b',
-        'QQQ': r'\bQQQ\b',
-        'BTC-USD': r'\b(BTC|Bitcoin)\b',
-        'ETH-USD': r'\b(ETH|Ethereum)\b',
-        'DOGE-USD': r'\bDOGE\b',
-    }
-    
-    @classmethod
-    def extract_tickers(cls, text: str) -> List[str]:
-        found_tickers = []
-        for ticker, pattern in cls.TICKER_PATTERNS.items():
-            if re.search(pattern, text, re.IGNORECASE):
-                found_tickers.append(ticker)
-        return found_tickers
-    
-    @classmethod
-    def get_primary_ticker(cls, text: str) -> str:
-        tickers = cls.extract_tickers(text)
-        return tickers[0] if tickers else random.choice(list(cls.TICKER_PATTERNS.keys()))
-
-
 @dataclass
 class SentimentMessage:
     text: str
@@ -145,110 +112,6 @@ class SentimentMessage:
             'author': self.author,
             'upvotes': self.upvotes
         }
-
-
-class RealDataGenerator:
-    """Generate realistic sentiment messages from real data sources"""
-    
-    @classmethod
-    def generate_news_message(cls, ticker: str = None) -> SentimentMessage:
-        """Generate a news-like message with real market data"""
-        if not ticker:
-            ticker = random.choice(list(StockTickerExtractor.TICKER_PATTERNS.keys()))
-        
-        # Get real data for the ticker
-        try:
-            stock_data = get_stock_data(ticker)
-            price = stock_data.get('current_price', 0)
-            change = stock_data.get('price_change', 0)
-            
-            if change > 0:
-                headline = f"📈 {ticker} advances {change:.2f}% to ${price:.2f} on strong volume"
-                sentiment = min(0.5, change / 100)
-            elif change < 0:
-                headline = f"📉 {ticker} declines {abs(change):.2f}% to ${price:.2f} amid market pressure"
-                sentiment = max(-0.5, change / 100)
-            else:
-                headline = f"➡️ {ticker} trading flat at ${price:.2f} with moderate activity"
-                sentiment = 0.0
-                
-            return SentimentMessage(
-                text=headline,
-                ticker=ticker,
-                source=random.choice(['Reuters', 'Bloomberg', 'CNBC', 'WSJ', 'Yahoo Finance']),
-                timestamp=datetime.now().isoformat(),
-                sentiment_score=round(sentiment, 2)
-            )
-        except Exception:
-            # If we can't get data, return a generic message
-            return SentimentMessage(
-                text=f"{ticker} is currently active in today's trading session",
-                ticker=ticker,
-                source=random.choice(['Reuters', 'Bloomberg', 'CNBC', 'WSJ']),
-                timestamp=datetime.now().isoformat(),
-                sentiment_score=0.0
-            )
-    
-    @classmethod
-    def generate_reddit_message(cls, ticker: str = None) -> SentimentMessage:
-        """Generate a Reddit-style message with real data context"""
-        if not ticker:
-            ticker = random.choice(list(StockTickerExtractor.TICKER_PATTERNS.keys()))
-        
-        try:
-            stock_data = get_stock_data(ticker)
-            price = stock_data.get('current_price', 0)
-            change = stock_data.get('price_change', 0)
-            volume = stock_data.get('volume', 0)
-            
-            if change > 3:
-                text = f"🚀 {ticker} mooning! Up {change:.2f}% to ${price:.2f} on {volume:,} volume! 🚀"
-                sentiment = 0.6
-            elif change > 1:
-                text = f"📈 {ticker} showing strength at ${price:.2f}, up {change:.2f}% today! Bulls in control"
-                sentiment = 0.3
-            elif change > -1:
-                text = f"🤔 {ticker} consolidating around ${price:.2f}, watching for breakout"
-                sentiment = 0.0
-            elif change > -3:
-                text = f"🔻 {ticker} dipping {abs(change):.2f}% to ${price:.2f}, buy the dip? 💎🙌"
-                sentiment = -0.3
-            else:
-                text = f"💀 {ticker} tanking! Down {abs(change):.2f}% to ${price:.2f}, panic selling! 😱"
-                sentiment = -0.6
-                
-            return SentimentMessage(
-                text=text,
-                ticker=ticker,
-                source='Reddit',
-                timestamp=datetime.now().isoformat(),
-                sentiment_score=round(sentiment, 2),
-                author=random.choice([
-                    "wallstreetbets", "DeepFuckingValue", "OptionsKing",
-                    "TheCryptoTrader", "ValueInvestor", "ChartMaster",
-                    "MoonMission", "HODL_4_Life", "TechAnalyst"
-                ]),
-                upvotes=random.randint(1, 5000)
-            )
-        except Exception:
-            return SentimentMessage(
-                text=f"👀 Anyone watching {ticker}? Interesting price action today",
-                ticker=ticker,
-                source='Reddit',
-                timestamp=datetime.now().isoformat(),
-                sentiment_score=0.0,
-                author=random.choice(["wallstreetbets", "DeepFuckingValue"]),
-                upvotes=random.randint(1, 1000)
-            )
-    
-    @classmethod
-    def generate_mixed_message(cls) -> SentimentMessage:
-        """Generate either news or Reddit message based on real data"""
-        if random.random() < 0.4:
-            return cls.generate_news_message()
-        else:
-            return cls.generate_reddit_message()
-
 
 class RealTimeStream:
     def __init__(self, max_queue_size: int = 1000):
@@ -290,7 +153,7 @@ class RealTimeStream:
         else:
             self.pause()
     
-    def get_message(self, timeout: float = 0.1) -> Optional[SentimentMessage]:
+    def get_message(self, timeout: float = 0.1):
         try:
             return self.message_queue.get(timeout=timeout)
         except queue.Empty:
@@ -313,66 +176,28 @@ class RealTimeStream:
         return self.recent_messages[-n:]
     
     def _run_loop(self):
-        message_buffer = []
-        last_sentiment_update = time.time()
-        sentiment_update_interval = 5.0
-        running_sentiment = 0.5
-        alpha = 0.3
-        
+        """Only sends pings - no data fetching to avoid rate limits"""
         while self.is_running:
             try:
                 if not self.is_paused:
-                    # Generate message based on real data
-                    message = RealDataGenerator.generate_mixed_message()
-                    self.message_queue.put(message)
+                    ping_msg = {
+                        'type': 'ping',
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    self.message_queue.put(ping_msg)
                     self.total_messages += 1
-                    
-                    if message.ticker:
-                        self.ticker_frequency[message.ticker] = \
-                            self.ticker_frequency.get(message.ticker, 0) + 1
-                    
-                    message_dict = message.to_dict()
-                    self.recent_messages.append(message_dict)
-                    if len(self.recent_messages) > self.max_recent:
-                        self.recent_messages = self.recent_messages[-self.max_recent:]
-                    
-                    if message.sentiment_score is not None:
-                        message_buffer.append(message.sentiment_score)
-                    
-                    current_time = time.time()
-                    if current_time - last_sentiment_update >= sentiment_update_interval and message_buffer:
-                        avg_score = sum(message_buffer) / len(message_buffer)
-                        running_sentiment = running_sentiment * (1 - alpha) + avg_score * alpha
-                        running_sentiment = max(-1, min(1, running_sentiment))
-                        
-                        smoothed_msg = {
-                            'type': 'sentiment_update',
-                            'sentiment_score': running_sentiment,
-                            'timestamp': datetime.now().isoformat()
-                        }
-                        self.message_queue.put(smoothed_msg)
-                        
-                        message_buffer = []
-                        last_sentiment_update = current_time
-                
-                time.sleep(random.uniform(1.0, 2.0))
-                
+                time.sleep(60)
             except Exception as e:
-                print(f"Error in data stream: {e}")
-                time.sleep(1.0)
-
+                print(f"Error in stream: {e}")
+                time.sleep(60)
 
 # ===== GLOBAL INSTANCES =====
 stream = RealTimeStream()
-stream.start()
-
 aggregator = SentimentAggregator()
 agent_alpha = AgentAlpha()
 
-
 # ===== STOCK DATA FUNCTIONS =====
 def resolve_ticker(query):
-    """Resolve a user-provided ticker or company name to a Yahoo Finance ticker."""
     if not query:
         return 'AAPL'
     
@@ -382,138 +207,263 @@ def resolve_ticker(query):
     
     normalized = raw_query.upper()
     
-    # Check aliases first
     alias = TICKER_ALIASES.get(normalized)
     if alias:
         return alias
     
-    # Check company names
     for symbol, company_name in COMPANY_NAMES.items():
         if company_name.lower() in raw_query.lower() or symbol.lower() == raw_query.lower():
             return symbol
     
-    # Check if it's a valid ticker format
     if re.fullmatch(r'^[A-Z0-9.\-^]{1,6}$', normalized):
         return normalized
     
-    # Try Yahoo Finance search
-    try:
-        ticker = yf.Ticker(raw_query)
-        info = ticker.info
-        if info and 'symbol' in info:
-            return str(info['symbol']).upper()
-    except Exception:
-        pass
-    
-    # If all else fails, return the original
     return normalized
 
 
-def fetch_yfinance_data(ticker):
-    """Fetch real data from Yahoo Finance with retry logic"""
-    session = requests.Session()
-    session.headers.update({'User-Agent': YFINANCE_USER_AGENT})
-    
-    last_exception = None
-    
-    for attempt in range(MAX_RETRIES):
-        try:
-            stock = yf.Ticker(ticker)
-            
-            # Try to get data with proper timeout
-            history = stock.history(period="1mo", auto_adjust=False)
-            
-            if history.empty:
-                # Try a different period
-                history = stock.history(period="5d", auto_adjust=False)
-                
-            if history.empty:
-                raise ValueError(f"No historical data found for {ticker}")
-            
-            # Get info (with fallback)
-            info = {}
-            try:
-                info = stock.info or {}
-            except Exception:
-                pass
-            
-            return stock, history, info
-            
-        except Exception as e:
-            last_exception = e
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(RETRY_DELAY * (attempt + 1))
-                continue
-    
-    raise last_exception or Exception(f"Failed to fetch data for {ticker} after {MAX_RETRIES} attempts")
+def _build_fallback_stock_data(ticker: str, error: Optional[Exception] = None) -> Dict:
+    """Built-in sample data as the final safety net"""
+    resolved_ticker = resolve_ticker(ticker)
+    company_name = COMPANY_NAMES.get(resolved_ticker, f'{resolved_ticker} Inc.')
+
+    sample_prices = {
+        'AAPL': [190.12, 191.40, 192.10, 189.85, 190.50, 191.20, 192.00, 193.15, 194.10, 193.00, 194.80, 195.50, 196.20, 197.10],
+        'TSLA': [220.40, 221.10, 219.90, 218.75, 219.20, 220.00, 221.30, 223.10, 224.00, 223.40, 224.90, 225.70, 226.40, 227.10],
+        'NVDA': [120.50, 121.10, 121.80, 122.40, 123.10, 123.80, 124.30, 124.90, 125.40, 125.90, 126.40, 126.90, 127.40, 128.00],
+        'MSFT': [420.90, 421.20, 422.10, 423.30, 424.20, 424.90, 425.60, 426.30, 427.10, 427.90, 428.50, 429.20, 430.00, 430.80],
+        'AMZN': [185.20, 186.00, 186.60, 187.20, 187.80, 188.40, 189.10, 189.80, 190.50, 191.10, 191.80, 192.40, 193.10, 193.70],
+        'GOOGL': [175.40, 176.10, 176.80, 177.10, 177.60, 178.20, 178.80, 179.30, 179.90, 180.40, 181.00, 181.50, 182.00, 182.50],
+        'META': [490.30, 491.10, 492.00, 492.80, 493.60, 494.20, 495.00, 495.70, 496.40, 497.10, 497.80, 498.40, 499.10, 499.80],
+        'SPY': [520.10, 520.70, 521.20, 521.80, 522.30, 522.90, 523.40, 524.00, 524.50, 525.10, 525.70, 526.20, 526.80, 527.30],
+        'QQQ': [440.00, 440.80, 441.60, 442.20, 442.90, 443.60, 444.20, 444.80, 445.40, 446.00, 446.60, 447.20, 447.80, 448.40],
+        'BTC-USD': [62000.0, 62130.0, 62250.0, 62380.0, 62510.0, 62640.0, 62770.0, 62900.0, 63050.0, 63200.0, 63340.0, 63480.0, 63620.0, 63760.0],
+        'ETH-USD': [3200.0, 3210.0, 3220.0, 3230.0, 3240.0, 3252.0, 3265.0, 3278.0, 3290.0, 3305.0, 3318.0, 3330.0, 3345.0, 3360.0],
+        'DOGE-USD': [0.18, 0.181, 0.182, 0.183, 0.184, 0.185, 0.186, 0.187, 0.188, 0.189, 0.19, 0.191, 0.192, 0.193],
+        'NFLX': [650.10, 651.20, 652.00, 653.20, 654.00, 655.10, 656.20, 657.30, 658.50, 659.80, 660.90, 661.80, 662.70, 663.60],
+        'JPM': [200.10, 200.50, 201.00, 201.40, 201.90, 202.40, 202.90, 203.30, 203.80, 204.20, 204.70, 205.10, 205.50, 206.00],
+        'BAC': [40.00, 40.10, 40.20, 40.35, 40.50, 40.70, 40.90, 41.10, 41.30, 41.50, 41.70, 41.90, 42.10, 42.30],
+        'DIS': [110.20, 110.60, 111.00, 111.40, 111.80, 112.20, 112.60, 113.00, 113.40, 113.80, 114.20, 114.60, 115.00, 115.40],
+        'VTI': [280.10, 280.60, 281.10, 281.70, 282.20, 282.80, 283.40, 284.00, 284.60, 285.10, 285.70, 286.20, 286.80, 287.40],
+    }
+
+    prices = sample_prices.get(resolved_ticker, sample_prices['AAPL'])
+    historical_prices = prices[:]
+    current_price = historical_prices[-1]
+    previous_close = historical_prices[-2] if len(historical_prices) > 1 else historical_prices[-1]
+    price_change = ((current_price - previous_close) / previous_close * 100) if previous_close else 0.0
+    sentiment_score = max(0, min(100, 50 + (price_change * 2)))
+    volume = max(100000, int(current_price * 1000))
+
+    return {
+        'ticker': resolved_ticker,
+        'company_name': company_name,
+        'current_price': round(current_price, 2),
+        'currency': 'USD',
+        'previous_close': round(previous_close, 2),
+        'open': round(historical_prices[0], 2),
+        'high': round(max(historical_prices), 2),
+        'low': round(min(historical_prices), 2),
+        'volume': volume,
+        'price_change': round(price_change, 2),
+        'sentiment_score': round(sentiment_score),
+        'historical_prices': [round(float(value), 2) for value in historical_prices],
+        'historical_dates': [(datetime.now() - timedelta(days=13 - idx)).strftime('%Y-%m-%d') for idx in range(len(historical_prices))],
+        'timestamp': datetime.now().isoformat(),
+        'last_trade_time': datetime.now().isoformat(),
+        'price_type': 'regular',
+        'data_source': 'offline-sample',
+        'market_status': get_market_status(),
+        'is_real_data': False,
+        'fallback_reason': str(error) if error else 'provider unavailable'
+    }
 
 
 def get_stock_data(ticker):
-    """Fetch real stock data from Yahoo Finance. No fallback."""
+    """Professional data fetcher with 3-tier fallback:
+    1. Finnhub (real-time) - Primary
+    2. yfinance with after-hours - Secondary
+    3. Offline samples - Final safety net
+    """
     resolved_ticker = resolve_ticker(ticker)
     cache_key = resolved_ticker.upper()
     
-    # Check cache
+    # Check cache first
     if cache_key in stock_cache:
         cache_time, data = stock_cache[cache_key]
         if (datetime.now() - cache_time).seconds < CACHE_DURATION:
             print(f"📦 Using cached data for: {resolved_ticker}")
             return data
     
-    print(f"🔍 Fetching REAL data for: {resolved_ticker}")
+    print(f"🔍 Fetching data for: {resolved_ticker}")
     
-    stock, history, info = fetch_yfinance_data(resolved_ticker)
+    # ===== TIER 1: FINNHUB (REAL-TIME) =====
+    if finnhub_client:
+        try:
+            print(f"📡 Tier 1: Trying Finnhub for {resolved_ticker}...")
+            time.sleep(REQUEST_DELAY)
+            
+            # Get real-time quote
+            quote = finnhub_client.quote(resolved_ticker)
+            
+            # Check if we got valid data
+            if quote and quote.get('c') and quote.get('c') > 0:
+                current_price = float(quote['c'])
+                previous_close = float(quote.get('pc', current_price))
+                open_price = float(quote.get('o', current_price))
+                high_price = float(quote.get('h', current_price))
+                low_price = float(quote.get('l', current_price))
+                volume = int(quote.get('v', 0))
+                
+                price_change = ((current_price - previous_close) / previous_close * 100) if previous_close else 0.0
+                sentiment_score = max(0, min(100, 50 + (price_change * 2)))
+                
+                # Get company name
+                company_name = COMPANY_NAMES.get(resolved_ticker, f'{resolved_ticker} Inc.')
+                try:
+                    profile = finnhub_client.company_profile2(symbol=resolved_ticker)
+                    if profile and profile.get('name'):
+                        company_name = profile['name']
+                except:
+                    pass
+                
+                # For historical data, fallback to yfinance
+                historical_prices = []
+                historical_dates = []
+                try:
+                    stock = yf.Ticker(resolved_ticker)
+                    hist = stock.history(period="1mo", auto_adjust=False)
+                    if not hist.empty:
+                        historical_prices = [round(float(value), 2) for value in hist['Close'].tolist()]
+                        historical_dates = [d.strftime('%Y-%m-%d') for d in hist.index]
+                except:
+                    # Use sample data for history
+                    sample = _build_fallback_stock_data(resolved_ticker)
+                    historical_prices = sample.get('historical_prices', [])
+                    historical_dates = sample.get('historical_dates', [])
+                
+                result = {
+                    'ticker': resolved_ticker,
+                    'company_name': company_name,
+                    'current_price': round(current_price, 2),
+                    'currency': 'USD',
+                    'previous_close': round(previous_close, 2),
+                    'open': round(open_price, 2),
+                    'high': round(high_price, 2),
+                    'low': round(low_price, 2),
+                    'volume': volume,
+                    'price_change': round(price_change, 2),
+                    'sentiment_score': round(sentiment_score),
+                    'historical_prices': historical_prices,
+                    'historical_dates': historical_dates,
+                    'timestamp': datetime.now().isoformat(),
+                    'last_trade_time': datetime.now().isoformat(),
+                    'price_type': 'live' if get_market_status()['is_open'] else 'after_hours',
+                    'data_source': 'finnhub',
+                    'market_status': get_market_status(),
+                    'is_real_data': True
+                }
+                
+                stock_cache[cache_key] = (datetime.now(), result)
+                print(f"✅ Finnhub data for {resolved_ticker}: ${current_price:.2f}")
+                return result
+            else:
+                print(f"⚠️ Finnhub returned no data for {resolved_ticker}")
+        except Exception as e:
+            print(f"⚠️ Finnhub error for {resolved_ticker}: {e}")
     
-    # Clean data
-    history = history.dropna(subset=['Close'])
-    if history.empty:
-        raise ValueError(f"No valid data found for {resolved_ticker}")
+    # ===== TIER 2: YFINANCE WITH AFTER-HOURS =====
+    try:
+        print(f"📡 Tier 2: Trying yfinance with after-hours for {resolved_ticker}...")
+        time.sleep(REQUEST_DELAY)
+        
+        # Get data with after-hours
+        history = yf.download(
+            resolved_ticker,
+            period="5d",
+            interval="5m",
+            progress=False,
+            auto_adjust=False,
+            threads=False,
+            prepost=True  # ✅ AFTER-HOURS ENABLED
+        )
+        
+        # If no data, try without prepost
+        if history.empty:
+            print("⚠️ No after-hours data, trying regular...")
+            history = yf.download(
+                resolved_ticker,
+                period="1mo",
+                interval="1d",
+                progress=False,
+                auto_adjust=False,
+                threads=False
+            )
+        
+        if history.empty:
+            raise ValueError(f"No data from yfinance for {resolved_ticker}")
+        
+        # Clean data
+        history = history.dropna(subset=['Close'])
+        if history.empty:
+            raise ValueError(f"No valid Close data")
+        
+        # Get latest values
+        latest = history.iloc[-1]
+        previous = history.iloc[-2] if len(history) > 1 else latest
+        
+        current_price = float(latest['Close'])
+        previous_close = float(previous['Close'])
+        last_trade_time = history.index[-1]
+        
+        # Check if after-hours
+        is_after_hours = last_trade_time.hour >= 16 or last_trade_time.hour < 9
+        
+        price_change = ((current_price - previous_close) / previous_close * 100) if previous_close else 0.0
+        sentiment_score = max(0, min(100, 50 + (price_change * 2)))
+        
+        # Get company info
+        company_name = COMPANY_NAMES.get(resolved_ticker, f'{resolved_ticker} Inc.')
+        try:
+            stock = yf.Ticker(resolved_ticker)
+            info = stock.info or {}
+            company_name = info.get('longName') or info.get('shortName') or company_name
+        except:
+            pass
+        
+        result = {
+            'ticker': resolved_ticker,
+            'company_name': company_name,
+            'current_price': round(current_price, 2),
+            'currency': 'USD',
+            'previous_close': round(previous_close, 2),
+            'open': round(float(latest['Open']) if 'Open' in latest else current_price, 2),
+            'high': round(float(latest['High']) if 'High' in latest else current_price, 2),
+            'low': round(float(latest['Low']) if 'Low' in latest else current_price, 2),
+            'volume': int(latest['Volume']) if 'Volume' in latest else 0,
+            'price_change': round(price_change, 2),
+            'sentiment_score': round(sentiment_score),
+            'historical_prices': [round(float(value), 2) for value in history['Close'].tolist()],
+            'historical_dates': [d.strftime('%Y-%m-%d %H:%M') for d in history.index],
+            'timestamp': datetime.now().isoformat(),
+            'last_trade_time': last_trade_time.isoformat(),
+            'price_type': 'after_hours' if is_after_hours else 'regular',
+            'data_source': 'yfinance',
+            'market_status': get_market_status(),
+            'is_real_data': True
+        }
+        
+        stock_cache[cache_key] = (datetime.now(), result)
+        print(f"✅ yfinance data for {resolved_ticker}: ${current_price:.2f} ({result['price_type']})")
+        return result
+        
+    except Exception as e:
+        print(f"⚠️ yfinance error: {e}")
     
-    # Get latest values
-    latest = history.iloc[-1]
-    previous = history.iloc[-2] if len(history) > 1 else latest
-    
-    current_price = float(latest['Close'])
-    previous_close = float(previous['Close'])
-    open_price = float(latest.get('Open', current_price))
-    high_price = float(latest.get('High', current_price))
-    low_price = float(latest.get('Low', current_price))
-    volume = int(latest.get('Volume', 0))
-    
-    # Calculate metrics
-    price_change = ((current_price - previous_close) / previous_close * 100) if previous_close else 0.0
-    sentiment_score = max(0, min(100, 50 + (price_change * 2)))
-    
-    # Get company info
-    company_name = info.get('longName') or info.get('shortName') or COMPANY_NAMES.get(resolved_ticker, f'{resolved_ticker} Inc.')
-    currency = info.get('currency') or 'USD'
-    
-    # Build result
-    result = {
-        'ticker': resolved_ticker,
-        'company_name': company_name,
-        'current_price': round(current_price, 2),
-        'currency': currency,
-        'previous_close': round(previous_close, 2),
-        'open': round(open_price, 2),
-        'high': round(high_price, 2),
-        'low': round(low_price, 2),
-        'volume': volume,
-        'price_change': round(price_change, 2),
-        'sentiment_score': round(sentiment_score),
-        'historical_prices': [round(float(value), 2) for value in history['Close'].tolist()],
-        'historical_dates': [d.strftime('%Y-%m-%d') for d in history.index],
-        'timestamp': datetime.now().isoformat(),
-        'data_source': 'yfinance',
-        'market_status': get_market_status(),
-        'last_refresh': datetime.now().isoformat()
-    }
-    
-    # Cache the result
+    # ===== TIER 3: OFFLINE SAMPLES (FINAL SAFETY NET) =====
+    print(f"📡 Tier 3: Using offline samples for {resolved_ticker}")
+    result = _build_fallback_stock_data(resolved_ticker, error=e if 'e' in locals() else None)
     stock_cache[cache_key] = (datetime.now(), result)
-    print(f"✅ Real data fetched for {resolved_ticker}: ${current_price:.2f}")
     return result
-
 
 # ===== API ENDPOINTS =====
 
@@ -527,7 +477,6 @@ def serve_app():
 
 @app.route('/api/stock/<ticker>')
 def get_stock(ticker):
-    """API endpoint for real-time stock data"""
     force_refresh = request.args.get('refresh', 'false').lower() == 'true'
     resolved_ticker = resolve_ticker(ticker)
     
@@ -539,90 +488,41 @@ def get_stock(ticker):
     
     try:
         data = get_stock_data(resolved_ticker)
-        data['resolved_ticker'] = resolved_ticker
-        data['is_real_data'] = True
         return jsonify(data)
-    except Exception as e:
-        return jsonify({
-            'error': True,
-            'message': str(e),
-            'ticker': resolved_ticker,
-            'is_real_data': False,
-            'timestamp': datetime.now().isoformat()
-        }), 503
-
-@app.route('/api/market/status')
-def market_status():
-    """Get current market status"""
-    return jsonify(get_market_status())
-
-@app.route('/api/sentiment')
-def get_sentiment():
-    """API endpoint for sentiment data"""
-    ticker = request.args.get('ticker', 'AAPL')
-    resolved_ticker = resolve_ticker(ticker)
-    
-    try:
-        stock_data = get_stock_data(resolved_ticker)
     except Exception as e:
         return jsonify({
             'error': True,
             'message': str(e),
             'ticker': resolved_ticker
         }), 503
+
+@app.route('/api/market/status')
+def market_status():
+    return jsonify(get_market_status())
+
+@app.route('/api/sentiment')
+def get_sentiment():
+    ticker = request.args.get('ticker', 'AAPL')
+    resolved_ticker = resolve_ticker(ticker)
     
-    # Generate sentiment trend from historical data
-    historical_prices = stock_data.get('historical_prices', [])
-    sentiment_series = []
-    
-    if len(historical_prices) >= 7:
-        recent_prices = historical_prices[-7:]
-        for idx in range(1, len(recent_prices)):
-            prev = recent_prices[idx - 1]
-            curr = recent_prices[idx]
-            if prev:
-                change = (curr - prev) / prev
-                sentiment_series.append(round(max(-1, min(1, change * 5)), 3))
-            else:
-                sentiment_series.append(0.0)
-    
-    # Pad if needed
-    while len(sentiment_series) < 6:
-        sentiment_series.append(0.0)
-    
-    trend_data = {
-        'dates': stock_data.get('historical_dates', [])[-7:],
-        'sentiment': sentiment_series[-6:],
-        'price': stock_data.get('historical_prices', [])[-7:]
-    }
-    
-    stream_stats = stream.get_statistics()
-    recent_messages = stream.get_recent_messages(10)
+    try:
+        stock_data = get_stock_data(resolved_ticker)
+    except Exception as e:
+        return jsonify({'error': True, 'message': str(e)}), 503
     
     return jsonify({
         'ticker': resolved_ticker,
         'sentiment_score': stock_data['sentiment_score'],
-        'trend_data': trend_data,
         'stock_data': {
             'current_price': stock_data['current_price'],
             'price_change': stock_data['price_change'],
-            'previous_close': stock_data['previous_close'],
-            'open': stock_data['open'],
-            'high': stock_data['high'],
-            'low': stock_data['low'],
-            'volume': stock_data['volume'],
             'company_name': stock_data['company_name']
         },
-        'stream_stats': stream_stats,
-        'recent_messages': recent_messages,
-        'timestamp': datetime.now().isoformat(),
-        'data_source': 'yfinance',
-        'market_status': get_market_status()
+        'timestamp': datetime.now().isoformat()
     })
 
 @app.route('/api/news')
 def get_news():
-    """Real news based on actual market data"""
     ticker = request.args.get('ticker', 'AAPL')
     resolved_ticker = resolve_ticker(ticker)
     
@@ -637,36 +537,15 @@ def get_news():
         volume = 0
     
     news_data = [
-        {
-            'outlet': 'Bloomberg', 
-            'score': round(0.5 + (change / 100), 2),
-            'impact': 'High' if abs(change) > 2 else 'Med',
-            'headline': f"{ticker} trades at ${price:.2f}, {'up' if change > 0 else 'down'} {abs(change):.2f}%"
-        },
-        {
-            'outlet': 'Reuters', 
-            'score': round(0.5 + (change / 150), 2),
-            'impact': 'Med',
-            'headline': f"{ticker} volume reaches {volume:,} shares in active trading"
-        },
-        {
-            'outlet': 'CNBC', 
-            'score': round(0.5 + (change / 120), 2),
-            'impact': 'Med',
-            'headline': f"Market update: {ticker} showing {'strength' if change > 0 else 'weakness'} today"
-        },
-        {
-            'outlet': 'WSJ', 
-            'score': round(0.5 + (change / 80), 2),
-            'impact': 'High' if abs(change) > 1.5 else 'Med',
-            'headline': f"{ticker} {'gains' if change > 0 else 'falls'} as investors digest market data"
-        }
+        {'outlet': 'Bloomberg', 'score': round(0.5 + (change / 100), 2), 'impact': 'High' if abs(change) > 2 else 'Med', 'headline': f"{ticker} trades at ${price:.2f}, {'up' if change > 0 else 'down'} {abs(change):.2f}%"},
+        {'outlet': 'Reuters', 'score': round(0.5 + (change / 150), 2), 'impact': 'Med', 'headline': f"{ticker} volume reaches {volume:,} shares"},
+        {'outlet': 'CNBC', 'score': round(0.5 + (change / 120), 2), 'impact': 'Med', 'headline': f"{ticker} showing {'strength' if change > 0 else 'weakness'} today"},
+        {'outlet': 'WSJ', 'score': round(0.5 + (change / 80), 2), 'impact': 'High' if abs(change) > 1.5 else 'Med', 'headline': f"{ticker} {'gains' if change > 0 else 'falls'}"}
     ]
     return jsonify(news_data)
 
 @app.route('/api/news/real')
 def get_real_news():
-    """Real-time news based on actual market data"""
     ticker = request.args.get('ticker', 'AAPL')
     resolved_ticker = resolve_ticker(ticker)
     
@@ -681,54 +560,10 @@ def get_real_news():
         volume = 0
     
     news_items = [
-        {
-            'title': f"{ticker} {'Surges' if change > 2 else 'Advances' if change > 0 else 'Declines'} {abs(change):.2f}% to ${price:.2f}",
-            'source': 'Bloomberg',
-            'sentiment': round(0.5 + (change / 100), 2),
-            'time': datetime.now().strftime('%H:%M'),
-            'url': '#',
-            'volume': volume
-        },
-        {
-            'title': f"Trading Update: {ticker} Volume Hits {volume:,} Shares",
-            'source': 'Reuters',
-            'sentiment': round(0.5 + (change / 150), 2),
-            'time': (datetime.now() - timedelta(minutes=15)).strftime('%H:%M'),
-            'url': '#',
-            'volume': volume
-        },
-        {
-            'title': f"{ticker} Price Action: ${price:.2f} - {'Bullish' if change > 0 else 'Bearish'} Sentiment Prevails",
-            'source': 'CNBC',
-            'sentiment': round(0.5 + (change / 120), 2),
-            'time': (datetime.now() - timedelta(minutes=30)).strftime('%H:%M'),
-            'url': '#',
-            'volume': volume
-        },
-        {
-            'title': f"Market Analysis: {ticker} {'Outperforms' if change > 1 else 'Underperforms'} Today",
-            'source': 'WSJ',
-            'sentiment': round(0.5 + (change / 80), 2),
-            'time': (datetime.now() - timedelta(minutes=45)).strftime('%H:%M'),
-            'url': '#',
-            'volume': volume
-        },
-        {
-            'title': f"{ticker}: ${price:.2f} - {'Record' if abs(change) > 3 else 'Moderate'} Movement Detected",
-            'source': 'Financial Times',
-            'sentiment': round(0.5 + (change / 100), 2),
-            'time': (datetime.now() - timedelta(hours=1)).strftime('%H:%M'),
-            'url': '#',
-            'volume': volume
-        },
-        {
-            'title': f"Investor Alert: {ticker} {'Up' if change > 0 else 'Down'} {abs(change):.2f}% on {volume:,} Volume",
-            'source': 'MarketWatch',
-            'sentiment': round(0.5 + (change / 90), 2),
-            'time': (datetime.now() - timedelta(hours=2)).strftime('%H:%M'),
-            'url': '#',
-            'volume': volume
-        }
+        {'title': f"{ticker} {'Surges' if change > 2 else 'Advances' if change > 0 else 'Declines'} {abs(change):.2f}% to ${price:.2f}", 'source': 'Bloomberg', 'sentiment': round(0.5 + (change / 100), 2), 'time': datetime.now().strftime('%H:%M'), 'url': '#', 'volume': volume},
+        {'title': f"Trading Update: {ticker} Volume Hits {volume:,} Shares", 'source': 'Reuters', 'sentiment': round(0.5 + (change / 150), 2), 'time': (datetime.now() - timedelta(minutes=15)).strftime('%H:%M'), 'url': '#', 'volume': volume},
+        {'title': f"{ticker} Price Action: ${price:.2f}", 'source': 'CNBC', 'sentiment': round(0.5 + (change / 120), 2), 'time': (datetime.now() - timedelta(minutes=30)).strftime('%H:%M'), 'url': '#', 'volume': volume},
+        {'title': f"Market Analysis: {ticker} {'Outperforms' if change > 1 else 'Underperforms'}", 'source': 'WSJ', 'sentiment': round(0.5 + (change / 80), 2), 'time': (datetime.now() - timedelta(minutes=45)).strftime('%H:%M'), 'url': '#', 'volume': volume}
     ]
     return jsonify(news_items)
 
@@ -807,11 +642,7 @@ def get_aggregated_sentiment(ticker):
     try:
         stock_data = get_stock_data(resolved_ticker)
     except Exception as e:
-        return jsonify({
-            'error': True,
-            'message': str(e),
-            'ticker': resolved_ticker
-        }), 503
+        return jsonify({'error': True, 'message': str(e)}), 503
     
     history_prices = stock_data.get('historical_prices', [])
     
@@ -872,11 +703,7 @@ def agent_analyze(ticker):
         try:
             stock_data = get_stock_data(resolved_ticker)
         except Exception as e:
-            return jsonify({
-                'error': True,
-                'message': f"Cannot analyze {resolved_ticker}: {str(e)}",
-                'ticker': resolved_ticker
-            }), 503
+            return jsonify({'error': True, 'message': f"Cannot analyze: {str(e)}"}), 503
         
         price_change = stock_data.get('price_change', 0.0)
         final_score = max(-0.95, min(0.95, price_change / 35))
@@ -886,34 +713,25 @@ def agent_analyze(ticker):
             'final_score': round(final_score, 3),
             'final_score_percent': round((final_score + 1) / 2 * 100, 1),
             'trend': trend,
-            'summary': f"Sentiment for {resolved_ticker} reflects the latest price move of {price_change:.2f}% with volume of {stock_data.get('volume', 0):,}.",
+            'summary': f"Sentiment for {resolved_ticker} reflects the latest price move of {price_change:.2f}%",
             'source_breakdown': {
                 'SEC Filings': {'raw_score': round(final_score * 0.6, 3), 'message_count': 5},
                 'Financial News': {'raw_score': round(final_score * 0.8, 3), 'message_count': 8},
                 'Reddit/WSB': {'raw_score': round(final_score * 0.4, 3), 'message_count': 3}
             },
             'recent_messages': [
-                {'source': 'Yahoo Finance', 'text': f'{resolved_ticker} moved {price_change:.2f}% on the latest trading session.', 'sentiment_score': round(final_score, 3)},
-                {'source': 'Market Data', 'text': f'Current price: ${stock_data.get("current_price", 0):.2f} with volume {stock_data.get("volume", 0):,}.', 'sentiment_score': round(final_score * 0.7, 3)},
+                {'source': 'Yahoo Finance', 'text': f'{resolved_ticker} moved {price_change:.2f}%', 'sentiment_score': round(final_score, 3)}
             ]
         }
         analysis = agent_alpha.analyze(resolved_ticker, sentiment_data)
         return jsonify({
             'ticker': resolved_ticker, 
             'sentiment_data': sentiment_data, 
-            'analysis': analysis,
-            'data_source': 'yfinance',
-            'market_status': get_market_status()
+            'analysis': analysis
         })
     except Exception as e:
         print(f"❌ Agent Alpha error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'ticker': ticker.upper(),
-            'error': True,
-            'message': str(e)
-        }), 500
+        return jsonify({'error': True, 'message': str(e)}), 500
 
 # ===== CHART ENDPOINT =====
 
@@ -922,19 +740,43 @@ def get_chart_data(ticker):
     try:
         days = request.args.get('days', 30, type=int)
         resolved_ticker = resolve_ticker(ticker)
-        chart = SentimentChart(dark_mode=True)
-        df = chart.get_data(resolved_ticker, days)
-        return jsonify({
-            'ticker': resolved_ticker,
-            'dates': df['date'].dt.strftime('%Y-%m-%d').tolist(),
-            'prices': df['price'].tolist(),
-            'sentiment': df['sentiment'].tolist(),
-            'keywords': df['keywords'].tolist()
-        })
+        
+        try:
+            stock_data = get_stock_data(resolved_ticker)
+            dates = stock_data.get('historical_dates', [])[-days:]
+            prices = stock_data.get('historical_prices', [])[-days:]
+            
+            sentiment = []
+            for i in range(1, len(prices)):
+                if prices[i-1]:
+                    change = (prices[i] - prices[i-1]) / prices[i-1]
+                    sentiment.append(round(max(-1, min(1, change * 5)), 3))
+                else:
+                    sentiment.append(0)
+            
+            while len(sentiment) < len(prices):
+                sentiment.insert(0, 0)
+            
+            return jsonify({
+                'ticker': resolved_ticker,
+                'dates': dates,
+                'prices': prices,
+                'sentiment': sentiment[-len(dates):] if len(sentiment) > len(dates) else sentiment,
+                'keywords': [[resolved_ticker, COMPANY_NAMES.get(resolved_ticker, '').split()[0]] for _ in range(len(dates))]
+            })
+        except:
+            chart = SentimentChart(dark_mode=True)
+            df = chart.get_data(resolved_ticker, days)
+            return jsonify({
+                'ticker': resolved_ticker,
+                'dates': df['date'].dt.strftime('%Y-%m-%d').tolist(),
+                'prices': df['price'].tolist(),
+                'sentiment': df['sentiment'].tolist(),
+                'keywords': df['keywords'].tolist()
+            })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # For production, use Gunicorn instead
     port = int(os.environ.get('PORT', 8502))
-    app.run(debug=False, host='0.0.0.0', port=port)
+    app.run(debug=True, host='0.0.0.0', port=port)

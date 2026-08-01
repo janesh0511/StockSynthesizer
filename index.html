@@ -787,6 +787,31 @@
             position: relative;
             z-index: 1;
         }
+
+        /* Search button style */
+        .search-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #4a9eff, #00d4ff);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+        .search-btn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(74, 158, 255, 0.3);
+        }
+        .search-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 5px;
+        }
+        .search-container .sidebar-input {
+            flex: 1;
+        }
     </style>
    
        <!-- Particles.js for the cool animated network background -->
@@ -833,7 +858,10 @@
             <h2>📈 Market Intelligence</h2>
             
             <label class="sidebar-label">Ticker Symbol / Company</label>
-            <input class="sidebar-input" id="tickerInput" type="text" value="AAPL" placeholder="AAPL or Apple">
+            <div class="search-container">
+                <input class="sidebar-input" id="tickerInput" type="text" value="AAPL" placeholder="AAPL, TSLA, AMZN...">
+                <button class="search-btn" id="searchBtn">🔍 Search</button>
+            </div>
             
             <label class="sidebar-label">Data Sources</label>
             <select class="sidebar-select" id="sourcesSelect" multiple>
@@ -1395,10 +1423,17 @@
             
             // ===== API CALLS =====
             async function fetchSentimentData() {
-                const ticker = document.getElementById('tickerInput').value || 'AAPL';
+                const ticker = document.getElementById('tickerInput').value.trim().toUpperCase() || 'AAPL';
                 try {
-                    const response = await fetch(`/api/sentiment?ticker=${ticker}`);
+                    const response = await fetch(`/api/sentiment?ticker=${ticker}&refresh=true`);
                     const data = await response.json();
+                    
+                    if (data.error) {
+                        console.error('API Error:', data.message);
+                        showError(data.message);
+                        return;
+                    }
+                    
                     sentimentData = {
                         score: data.sentiment_score,
                         trend: data.trend_data,
@@ -1408,14 +1443,29 @@
                     updateCharts(data);
                     updateStockDisplay(data.stock_data);
                     updateTradeSignal(data);
+                    
+                    // Update ticker display
+                    document.getElementById('tickerDisplay').textContent = 
+                        `Synthesized Psychological Signal for ${ticker}`;
+                    
                 } catch (error) {
                     console.error('Error fetching sentiment data:', error);
+                    showError('Failed to fetch data for ' + ticker);
+                }
+            }
+            
+            function showError(message) {
+                const summaryEl = document.getElementById('sentimentSummary');
+                if (summaryEl) {
+                    summaryEl.textContent = '⚠️ ' + message;
+                    summaryEl.style.color = '#ff6b6b';
+                    summaryEl.style.borderLeftColor = '#ff6b6b';
                 }
             }
             
             // ===== FETCH AGGREGATED SENTIMENT =====
             async function fetchAggregatedSentiment() {
-                const ticker = document.getElementById('tickerInput').value || 'AAPL';
+                const ticker = document.getElementById('tickerInput').value.trim().toUpperCase() || 'AAPL';
                 try {
                     const response = await fetch(`/api/aggregate/${ticker}`);
                     const data = await response.json();
@@ -1444,6 +1494,8 @@
                         const summaryEl = document.getElementById('sentimentSummary');
                         if (summaryEl && data.summary) {
                             summaryEl.textContent = data.summary;
+                            summaryEl.style.color = '#b0b0b0';
+                            summaryEl.style.borderLeftColor = '#4a9eff';
                         }
                     }
                 } catch (error) {
@@ -1453,9 +1505,12 @@
             
             // ===== LOAD SENTIMENT CHART =====
             async function loadSentimentChart() {
-                const ticker = document.getElementById('tickerInput').value || 'AAPL';
+                const ticker = document.getElementById('tickerInput').value.trim().toUpperCase() || 'AAPL';
                 const loading = document.getElementById('chartLoading');
                 const content = document.getElementById('chartContent');
+                
+                loading.style.display = 'block';
+                content.style.display = 'none';
                 
                 try {
                     const response = await fetch(`/api/chart/${ticker}?days=30`);
@@ -1569,27 +1624,27 @@
                             }
                         ],
                         annotations: [
-    {
-        x: data.dates[data.dates.length - 1],
-        y: 0.6,
-        text: '🟢 Positive Sentiment',  // ← Changed
-        showarrow: false,
-        font: { size: 10, color: '#2ecc71' },
-        xref: 'x',
-        yref: 'y2',
-        xanchor: 'right'
-    },
-    {
-        x: data.dates[data.dates.length - 1],
-        y: -0.6,
-        text: '🔴 Negative Sentiment',  // ← Changed
-        showarrow: false,
-        font: { size: 10, color: '#ff6b6b' },
-        xref: 'x',
-        yref: 'y2',
-        xanchor: 'right'
-    }
-]
+                            {
+                                x: data.dates[data.dates.length - 1],
+                                y: 0.6,
+                                text: '🟢 Positive Sentiment',
+                                showarrow: false,
+                                font: { size: 10, color: '#2ecc71' },
+                                xref: 'x',
+                                yref: 'y2',
+                                xanchor: 'right'
+                            },
+                            {
+                                x: data.dates[data.dates.length - 1],
+                                y: -0.6,
+                                text: '🔴 Negative Sentiment',
+                                showarrow: false,
+                                font: { size: 10, color: '#ff6b6b' },
+                                xref: 'x',
+                                yref: 'y2',
+                                xanchor: 'right'
+                            }
+                        ]
                     };
                     
                     const config = {
@@ -1605,7 +1660,7 @@
                     console.error('Chart error:', error);
                     loading.innerHTML = `
                         <div style="color: #ff6b6b; text-align: center; padding: 20px;">
-                            <p>⚠️ Error loading chart</p>
+                            <p>⚠️ Error loading chart for ${ticker}</p>
                             <p style="font-size: 12px; color: #6c6e7a;">${error.message}</p>
                             <button onclick="loadSentimentChart()" style="margin-top: 10px; padding: 8px 20px; background: #4a9eff; border: none; border-radius: 6px; color: white; cursor: pointer;">Retry</button>
                         </div>
@@ -1614,7 +1669,6 @@
             }
             
             // ===== UPDATE UI =====
-            // ===== UPDATED UI WITH COUNT-UP ANIMATION =====
             function updateUI(data) {
                 document.getElementById('tickerDisplay').textContent = 
                     `Synthesized Psychological Signal for ${data.ticker || 'AAPL'}`;
@@ -1622,26 +1676,20 @@
                 const targetScore = data.sentiment_score || 72;
                 const scoreEl = sentimentScoreEl;
                 
-                // Parse current number (remove "/100" if it exists)
                 let currentText = scoreEl.textContent;
                 let currentNum = parseInt(currentText) || 0;
                 
-                // If the score is already correct, don't animate
                 if (currentNum === targetScore) {
-                    // Just ensure the label is correct
                     updateSentimentLabel(targetScore);
                     return;
                 }
 
-                // Animate counting up/down
-                const duration = 1000; // 1 second animation
+                const duration = 1000;
                 const startTime = performance.now();
                 
                 function animateCount(currentTime) {
                     const elapsed = currentTime - startTime;
                     const progress = Math.min(elapsed / duration, 1);
-                    
-                    // Ease-out effect (slows down at the end)
                     const easeOut = 1 - Math.pow(1 - progress, 3);
                     const currentValue = Math.round(currentNum + (targetScore - currentNum) * easeOut);
                     
@@ -1650,7 +1698,7 @@
                     if (progress < 1) {
                         requestAnimationFrame(animateCount);
                     } else {
-                        scoreEl.textContent = `${targetScore}/100`; // Ensure final number is exact
+                        scoreEl.textContent = `${targetScore}/100`;
                         currentSentimentScore = targetScore;
                         updateSentimentLabel(targetScore);
                     }
@@ -1659,7 +1707,6 @@
                 requestAnimationFrame(animateCount);
             }
 
-            // Helper to update the label separately
             function updateSentimentLabel(score) {
                 let label = 'Neutral';
                 let labelClass = 'neutral';
@@ -1680,7 +1727,8 @@
             function updateStockDisplay(stockData) {
                 if (!stockData) return;
                 
-                document.getElementById('companyName').textContent = stockData.company_name || stockData.ticker;
+                const dataSourceLabel = stockData.is_real_data ? 'Live market data' : 'Fallback data';
+                document.getElementById('companyName').textContent = `${stockData.company_name || stockData.ticker} • ${dataSourceLabel}`;
                 document.getElementById('currentPrice').textContent = `$${stockData.current_price.toFixed(2)}`;
                 
                 const changeEl = document.getElementById('priceChange');
@@ -1719,21 +1767,18 @@
             }
             
             // ===== GAUGE CHART =====
-                       // ===== NEW GLOWING GAUGE =====
             function updateGauge(value) {
                 const canvas = document.getElementById('sentimentGauge');
-                if (!canvas) return; // Safety check
+                if (!canvas) return;
 
                 const ctx = canvas.getContext('2d');
                 const gaugeValue = Math.min(100, Math.max(0, value));
                 const remaining = 100 - gaugeValue;
 
-                // Determine color
-                let color = '#4ade80'; // Green
-                if (gaugeValue < 40) color = '#f87171'; // Red
-                else if (gaugeValue < 65) color = '#facc15'; // Yellow
+                let color = '#4ade80';
+                if (gaugeValue < 40) color = '#f87171';
+                else if (gaugeValue < 65) color = '#facc15';
 
-                // Destroy existing chart if it exists to prevent overlap
                 if (charts.gauge) charts.gauge.destroy();
 
                 charts.gauge = new Chart(ctx, {
@@ -1743,7 +1788,7 @@
                             data: [gaugeValue, remaining],
                             backgroundColor: [color, 'rgba(255, 255, 255, 0.1)'],
                             borderWidth: 0,
-                            borderRadius: 10, // Makes it look like a glowing segmented ring
+                            borderRadius: 10,
                         }]
                     },
                     options: {
@@ -1759,11 +1804,8 @@
                     }
                 });
 
-                // Update the text in the middle
                 document.getElementById('gaugeScore').innerText = Math.round(gaugeValue);
             }
-            
-           
             
             // ===== AREA CHART =====
             function updateAreaChart(data) {
@@ -1804,7 +1846,7 @@
                 });
             }
             
-                      function updateCharts(data) {
+            function updateCharts(data) {
                 updateGauge(data.sentiment_score || 72);
                 updateAreaChart(data);
             }
@@ -1830,11 +1872,58 @@
                 });
             }
             
+            // ===== UPDATE TICKER - THE FIX =====
+            function updateTicker() {
+                const input = document.getElementById('tickerInput');
+                const ticker = input.value.trim().toUpperCase();
+                
+                if (!ticker) {
+                    input.value = 'AAPL';
+                    return;
+                }
+                
+                console.log(`🔍 Searching for: ${ticker}`);
+                
+                // Show loading state
+                document.getElementById('tickerDisplay').textContent = `⏳ Loading ${ticker}...`;
+                document.getElementById('currentPrice').textContent = 'Loading...';
+                document.getElementById('companyName').textContent = 'Fetching data...';
+                document.getElementById('sentimentSummary').textContent = 'Loading sentiment data...';
+                document.getElementById('sentimentSummary').style.color = '#b0b0b0';
+                document.getElementById('sentimentSummary').style.borderLeftColor = '#4a9eff';
+                
+                // Fetch all data
+                Promise.all([
+                    fetchSentimentData(),
+                    fetchAggregatedSentiment(),
+                    new Promise(resolve => setTimeout(resolve, 300))
+                ]).then(() => {
+                    loadSentimentChart();
+                    fetchRealNews();
+                }).catch(error => {
+                    console.error('Error updating ticker:', error);
+                    document.getElementById('tickerDisplay').textContent = `❌ Error loading ${ticker}`;
+                });
+            }
+            
             // ===== EVENT LISTENERS =====
             function setupEventListeners() {
-                document.getElementById('tickerInput').addEventListener('change', function() {
-                    fetchSentimentData();
-                    setTimeout(loadSentimentChart, 1000);
+                // Search button
+                document.getElementById('searchBtn').addEventListener('click', updateTicker);
+                
+                // Enter key
+                document.getElementById('tickerInput').addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        updateTicker();
+                    }
+                });
+                
+                // Blur (when user clicks away)
+                document.getElementById('tickerInput').addEventListener('blur', function() {
+                    if (this.value.trim()) {
+                        updateTicker();
+                    }
                 });
                 
                 document.getElementById('timeWindow').addEventListener('change', function() {
@@ -1887,7 +1976,7 @@
                 
                 // ===== AGENT ALPHA =====
                 document.getElementById('agentAlphaBtn').addEventListener('click', async function() {
-                    const ticker = document.getElementById('tickerInput').value || 'AAPL';
+                    const ticker = document.getElementById('tickerInput').value.trim().toUpperCase() || 'AAPL';
                     const analysisDiv = document.getElementById('agentAnalysis');
                     const contentDiv = document.getElementById('agentAnalysisContent');
                     
@@ -1895,7 +1984,7 @@
                     contentDiv.innerHTML = `
                         <div style="text-align: center; padding: 20px;">
                             <div style="display: inline-block; width: 40px; height: 40px; border: 3px solid #3a3c44; border-radius: 50%; border-top-color: #6c5ce7; animation: spin 0.8s linear infinite;"></div>
-                            <p style="margin-top: 10px; color: #b0b0b0;">🧠 Agent Alpha is analyzing market psychology...</p>
+                            <p style="margin-top: 10px; color: #b0b0b0;">🧠 Agent Alpha is analyzing ${ticker}...</p>
                         </div>
                     `;
                     
@@ -1903,7 +1992,7 @@
                         const response = await fetch(`/api/agent/analyze/${ticker}`);
                         const data = await response.json();
                         
-                        let html = data.analysis;
+                        let html = data.analysis || data.message || 'No analysis available';
                         html = html.replace(/### (.*)/g, '<h3 style="color: #6c5ce7; margin-top: 20px;">$1</h3>');
                         html = html.replace(/## (.*)/g, '<h2 style="color: #a29bfe; margin-top: 25px;">$1</h2>');
                         html = html.replace(/\n- /g, '<br>• ');
@@ -1914,7 +2003,7 @@
                                 ${html}
                                 <hr style="border-color: #3a3c44; margin: 20px 0;">
                                 <p style="color: #6c6e7a; font-size: 12px;">
-                                    Generated on ${new Date().toLocaleString()} | Agent Alpha AI
+                                    Generated on ${new Date().toLocaleString()} | Agent Alpha AI for ${ticker}
                                 </p>
                             </div>
                         `;
@@ -1972,16 +2061,20 @@
             
             // ===== INITIALIZE =====
             function init() {
-                initParticles(); // Activate the particles background
+                initParticles();
                 setupTabs();
                 setupEventListeners();
-                fetchSentimentData();
-                fetchAggregatedSentiment();
-                connectSSE();
                 
-                setTimeout(fetchRealNews, 1000);
+                // Initial load
+                setTimeout(() => {
+                    fetchSentimentData();
+                    fetchAggregatedSentiment();
+                    setTimeout(loadSentimentChart, 500);
+                    setTimeout(fetchRealNews, 600);
+                }, 300);
+                
+                connectSSE();
                 setTimeout(updateStreamStats, 1000);
-                setTimeout(loadSentimentChart, 1500);
             }
             
             init();
