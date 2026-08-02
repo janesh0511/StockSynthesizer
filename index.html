@@ -1727,8 +1727,7 @@
             function updateStockDisplay(stockData) {
                 if (!stockData) return;
                 
-                const dataSourceLabel = stockData.is_real_data ? 'Live market data' : 'Fallback data';
-                document.getElementById('companyName').textContent = `${stockData.company_name || stockData.ticker} • ${dataSourceLabel}`;
+                                document.getElementById('companyName').textContent = stockData.company_name || stockData.ticker;
                 document.getElementById('currentPrice').textContent = `$${stockData.current_price.toFixed(2)}`;
                 
                 const changeEl = document.getElementById('priceChange');
